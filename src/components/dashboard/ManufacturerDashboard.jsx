@@ -3,6 +3,7 @@ import { useBlockchain } from '../../context/BlockchainContext';
 import QRScanner from '../common/QRScanner';
 import ImageUpload from '../common/ImageUpload';
 import QRGenerator from '../common/QRGenerator';
+import BlockchainVerification from '../common/BlockchainVerification';
 import { Factory, Package, Calendar, Upload, RotateCcw, CheckCircle } from 'lucide-react';
 
 function ManufacturerDashboard() {
@@ -36,23 +37,18 @@ function ManufacturerDashboard() {
   };
 
   const handleQRScan = async (data) => {
-    try {
-      const qrData = JSON.parse(data);
-      if (qrData.type === 'processing') {
-        const result = await queryChaincode('GetProcessingDetails', [qrData.processId]);
-        if (result.success) {
-          setScannedData({
-            ...result.data,
-            qrData
-          });
-        }
-      } else {
-        alert('Please scan a valid processing QR code');
-      }
-    } catch (error) {
-      console.error('Error processing QR scan:', error);
-      alert('Invalid QR code');
-    }
+    // The QR data is just the batch ID (e.g., "HERB12345")
+    console.log('Manufacturer scanned batch ID:', data);
+    setScannedData({ batchId: data });
+  };
+
+  const handleBlockchainVerification = (blockchainData) => {
+    // Update scanned data with blockchain verification results
+    setScannedData(prev => ({
+      ...prev,
+      ...blockchainData,
+      verified: true
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -113,7 +109,11 @@ function ManufacturerDashboard() {
       const result = await invokeChaincode('BatchCreation', [JSON.stringify(batchData)]);
       
       if (result.success && result.qrData) {
-        setFinalQR(result.qrData);
+        setFinalQR({
+          ...result.qrData,
+          batchId: result.batchId,
+          qrType: result.qrType
+        });
 
         // Reset form
         setProductData({
@@ -166,32 +166,15 @@ function ManufacturerDashboard() {
         
         <div className="scanner-area">
           <p className="scanner-instruction">
-            First, scan the QR code from the processing step to verify the processed herb.
+            Scan the processing QR code to verify processed herb with blockchain.
           </p>
           <QRScanner onScan={handleQRScan} />
           
           {scannedData && (
-            <div className="scanned-info">
-              <h3>Processing Verified - Ready for Manufacturing</h3>
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">Species:</span>
-                  <span className="info-value">{scannedData.species}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Process Type:</span>
-                  <span className="info-value">{scannedData.processType}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Yield:</span>
-                  <span className="info-value">{scannedData.yield} kg</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Process Date:</span>
-                  <span className="info-value">{new Date(scannedData.processDate).toLocaleDateString()}</span>
-                </div>
-              </div>
-            </div>
+            <BlockchainVerification 
+              batchId={scannedData.batchId}
+              onVerificationComplete={handleBlockchainVerification}
+            />
           )}
         </div>
       </div>
@@ -203,8 +186,27 @@ function ManufacturerDashboard() {
           <h2>Batch Details</h2>
         </div>
 
-        {scannedData ? (
+        {scannedData && scannedData.verified ? (
           <form onSubmit={handleSubmit} className="batch-form">
+            <div className="previous-steps-summary">
+              <h4>Complete Journey from Blockchain:</h4>
+              <div className="journey-steps">
+                <div className="journey-step">
+                  <span>🌱 Collection: {scannedData.herbName} by {scannedData.farmerID}</span>
+                </div>
+                {scannedData.qualityTests && (
+                  <div className="journey-step">
+                    <span>🔬 Quality: Passed (Moisture: {scannedData.qualityTests.moisture}%)</span>
+                  </div>
+                )}
+                {scannedData.processing && (
+                  <div className="journey-step">
+                    <span>⚙️ Processing: {scannedData.processing.method} (Yield: {scannedData.processing.yield}kg)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Product Name</label>
@@ -306,10 +308,18 @@ function ManufacturerDashboard() {
         <div className="qr-display-area">
           {finalQR ? (
             <div className="final-qr-container">
-              <QRGenerator data={finalQR} size={256} showBlockchainButton={true} />
+              <QRGenerator 
+                data={finalQR.qrCodeUrl} 
+                batchId={finalQR.batchId}
+                qrType={finalQR.qrType}
+                size={256} 
+              />
               <div className="qr-instructions">
                 <h4>Consumer QR Code Generated!</h4>
+                <p><strong>Batch ID:</strong> {finalQR.batchId}</p>
+                <p><strong>Type:</strong> {finalQR.qrType}</p>
                 <p>This QR code contains the complete traceability information and should be printed on the product packaging for consumer verification.</p>
+                <p><strong>Complete Journey:</strong> Collection → Quality → Processing → Manufacturing</p>
               </div>
             </div>
           ) : (
@@ -560,6 +570,34 @@ function ManufacturerDashboard() {
           padding: 60px;
           color: #6b7280;
           text-align: center;
+        }
+        
+        .previous-steps-summary {
+          background: #f0f9ff;
+          border: 1px solid #bfdbfe;
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 20px;
+        }
+        
+        .previous-steps-summary h4 {
+          color: #1e40af;
+          margin-bottom: 12px;
+          font-size: 16px;
+        }
+        
+        .journey-steps {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        
+        .journey-step {
+          padding: 8px 12px;
+          background: white;
+          border-radius: 6px;
+          font-size: 14px;
+          color: #374151;
         }
 
         @media (max-width: 768px) {

@@ -42,18 +42,23 @@ export function BlockchainProvider({ children }) {
         
         setTransactions(prev => [transaction, ...prev]);
         
-        // Generate QR code for the result
-        const qrResult = await generateQR({
-          type: this.getQRType(functionName),
-          batchId: result.batchId || result.eventId || result.testId || result.processId,
-          transactionId: result.transactionId,
-          blockNumber: result.blockNumber,
-          timestamp: result.timestamp
+        // Generate QR code containing only the batch ID
+        const batchId = result.batchId || result.eventId || result.testId || result.processId || `BATCH_${Date.now()}`;
+        
+        const qrResult = await generateQR(batchId, {
+          width: 256,
+          margin: 2,
+          color: {
+            dark: '#2d5016',
+            light: '#FFFFFF'
+          }
         });
         
         return {
           ...result,
-          qrData: qrResult
+          qrData: qrResult,
+          batchId: batchId,
+          qrType: getQRType(functionName)
         };
       } else {
         throw new Error('Transaction failed');
@@ -170,16 +175,23 @@ export function BlockchainProvider({ children }) {
     }
   };
 
-  const generateQR = async (data) => {
+  const generateQR = async (batchId, options = {}) => {
     try {
       const response = await fetch('/api/qr/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data })
+        body: JSON.stringify({ 
+          data: batchId,
+          options: options
+        })
       });
 
       if (response.ok) {
-        return await response.json();
+        const result = await response.json();
+        return {
+          ...result,
+          batchId: batchId
+        };
       } else {
         throw new Error('QR generation failed');
       }

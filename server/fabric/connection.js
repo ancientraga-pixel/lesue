@@ -314,7 +314,7 @@ BKfUei9QVL812XFjC1+MOCK+CERTIFICATE+DATA+HERE+FOR+DEMO+PURPOSES
     let mockData = {};
     
     switch (functionName) {
-      case 'queryBatch':
+      case 'GetProvenance':
         mockData = {
           batchId: args[0],
           herbName: 'Ashwagandha',
@@ -341,12 +341,13 @@ BKfUei9QVL812XFjC1+MOCK+CERTIFICATE+DATA+HERE+FOR+DEMO+PURPOSES
           manufacturing: {
             productName: 'Premium Ashwagandha Powder',
             batchSize: 100,
-            expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+            expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
           }
         };
         break;
       
-      case 'GetProvenance':
+      case 'queryBatch':
         mockData = {
           batchId: args[0],
           productName: 'Premium Ashwagandha Powder',
@@ -359,26 +360,33 @@ BKfUei9QVL812XFjC1+MOCK+CERTIFICATE+DATA+HERE+FOR+DEMO+PURPOSES
             moisture: 8.5,
             pesticides: 0.005,
             heavyMetals: 2.1,
+          herbName: 'Ashwagandha',
+          farmerID: 'FARMER_001',
+          processorID: 'PROC_001',
+          location: {
+            latitude: 26.9124,
+            longitude: 75.7873,
+            address: 'Rajasthan, India'
+          },
+          timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          qualityTests: {
+            moisture: 8.5,
+            pesticides: 0.005,
+            heavyMetals: 2.1,
             passed: true
           },
-          journey: [
-            {
-              stage: 'Collection',
-              timestamp: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-              organization: 'FarmersCoop',
-              latitude: 26.9124,
-              longitude: 75.7873,
-              details: { species: 'Ashwagandha', weight: '25.5 kg', collector: 'Rajesh Kumar' }
-            },
-            {
-              stage: 'Quality Testing',
-              timestamp: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-              organization: 'QualityLabs',
-              latitude: 26.9200,
-              longitude: 75.7900,
-              details: { moisture: '8.5%', pesticides: '0.005 mg/kg', passed: 'true' }
-            }
-          ]
+          processing: {
+            method: 'Drying',
+            temperature: 60,
+            duration: 24,
+            yield: 20.2
+          },
+          manufacturing: {
+            productName: 'Premium Ashwagandha Powder',
+            batchSize: 100,
+            expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+          }
         };
         break;
       

@@ -100,7 +100,11 @@ function CollectorDashboard() {
       const result = await invokeChaincode('RecordCollectionEvent', [JSON.stringify(eventData)]);
       
       if (result.success && result.qrData) {
-        setQrCode(result.qrData);
+        setQrCode({
+          ...result.qrData,
+          batchId: result.batchId,
+          qrType: result.qrType
+        });
 
         // Reset form
         setFormData({
@@ -268,7 +272,20 @@ function CollectorDashboard() {
         
         <div className="qr-display-area">
           {qrCode ? (
-            <QRGenerator data={qrCode} size={256} showBlockchainButton={true} />
+            <div className="qr-container">
+              <QRGenerator 
+                data={qrCode.qrCodeUrl} 
+                batchId={qrCode.batchId}
+                qrType={qrCode.qrType}
+                size={256} 
+              />
+              <div className="qr-details">
+                <h4>Collection QR Generated</h4>
+                <p><strong>Batch ID:</strong> {qrCode.batchId}</p>
+                <p><strong>Type:</strong> {qrCode.qrType}</p>
+                <p>This QR code contains only the batch ID for blockchain verification.</p>
+              </div>
+            </div>
           ) : (
             <div className="qr-placeholder">
               <Camera size={48} />
@@ -685,6 +702,33 @@ function CollectorDashboard() {
           padding: 40px;
           color: #6b7280;
           text-align: center;
+        }
+        
+        .qr-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 20px;
+        }
+        
+        .qr-details {
+          text-align: center;
+          background: #f0f9ff;
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px solid #bfdbfe;
+        }
+        
+        .qr-details h4 {
+          color: #1e40af;
+          margin-bottom: 12px;
+          font-size: 16px;
+        }
+        
+        .qr-details p {
+          margin: 4px 0;
+          color: #374151;
+          font-size: 14px;
         }
 
         @media (max-width: 768px) {

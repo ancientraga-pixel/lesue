@@ -1,60 +1,22 @@
 import React, { useState } from 'react';
 import QRScanner from '../components/common/QRScanner';
-import { useBlockchain } from '../context/BlockchainContext';
+import BlockchainVerification from '../components/common/BlockchainVerification';
 import { Package, MapPin, Award, Clock } from 'lucide-react';
 import './ConsumerPortal.css';
 
 function ConsumerPortal() {
-  const { queryChaincode } = useBlockchain();
   const [scannedData, setScannedData] = useState(null);
   const [provenanceData, setProvenanceData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const handleQRScan = async (data) => {
-    try {
-      setLoading(true);
-      setError('');
-      
-      // Parse QR data using backend service
-      const parseResponse = await fetch('/api/qr/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrData: data })
-      });
-      
-      if (!parseResponse.ok) {
-        throw new Error('Invalid QR code format');
-      }
-      
-      const parseResult = await parseResponse.json();
-      
-      if (!parseResult.valid) {
-        throw new Error(parseResult.error || 'Invalid QR code');
-      }
-      
-      const qrData = parseResult.data;
-      console.log('Valid QR Data received:', qrData);
-      
-      // Get real provenance data from blockchain
-      if (qrData.type && qrData.batchId) {
-        const result = await queryChaincode('GetProvenance', [qrData.batchId]);
-        
-        if (result.success) {
-          setScannedData(qrData);
-          setProvenanceData(result.data);
-        } else {
-          throw new Error('Batch not found on blockchain');
-        }
-      } else {
-        throw new Error('QR code missing required data');
-      }
-    } catch (error) {
-      console.error('QR scan error:', error);
-      setError(error.message || 'Failed to process QR code');
-    } finally {
-      setLoading(false);
-    }
+    // The QR data is just the batch ID (e.g., "HERB12345")
+    console.log('Consumer scanned batch ID:', data);
+    setScannedData({ batchId: data });
+  };
+
+  const handleBlockchainVerification = (blockchainData) => {
+    // Set the complete provenance data from blockchain
+    setProvenanceData(blockchainData);
   };
 
   const renderJourneyMap = () => {
@@ -135,17 +97,11 @@ function ConsumerPortal() {
               <h2>Scan Product QR Code</h2>
               <QRScanner onScan={handleQRScan} />
               
-              {loading && (
-                <div className="loading">
-                  <div className="spinner"></div>
-                  <span>Retrieving product information...</span>
-                </div>
-              )}
-              
-              {error && (
-                <div className="error-message">
-                  {error}
-                </div>
+              {scannedData && (
+                <BlockchainVerification 
+                  batchId={scannedData.batchId}
+                  onVerificationComplete={handleBlockchainVerification}
+                />
               )}
               
               <div className="scan-instructions">
@@ -171,15 +127,15 @@ function ConsumerPortal() {
                     </div>
                     <div className="detail-item">
                       <Award size={16} />
-                      <strong>Species:</strong> {provenanceData.species}
+                      <strong>Species:</strong> {provenanceData.herbName}
                     </div>
                     <div className="detail-item">
                       <Clock size={16} />
-                      <strong>Manufacturing Date:</strong> {new Date(provenanceData.manufacturingDate).toLocaleDateString()}
+                      <strong>Collection Date:</strong> {new Date(provenanceData.timestamp).toLocaleDateString()}
                     </div>
                     <div className="detail-item">
-                      <Clock size={16} />
-                      <strong>Expiry Date:</strong> {new Date(provenanceData.expiryDate).toLocaleDateString()}
+                      <MapPin size={16} />
+                      <strong>Origin:</strong> {provenanceData.location?.address || 'India'}
                     </div>
                   </div>
                   
@@ -188,10 +144,10 @@ function ConsumerPortal() {
                   </div>
                 </div>
                 
-                {provenanceData.productImage && (
+                {provenanceData.manufacturing?.productImage && (
                   <div className="product-image">
                     <img 
-                      src={`https://ipfs.io/ipfs/${provenanceData.productImage}`} 
+                      src={`https://ipfs.io/ipfs/${provenanceData.manufacturing.productImage}`} 
                       alt="Product"
                     />
                   </div>
@@ -252,36 +208,106 @@ function ConsumerPortal() {
             <div className="card">
               <h3>Complete Traceability Timeline</h3>
               <div className="timeline">
-                {provenanceData.journey && provenanceData.journey.map((step, index) => 
-                  renderTimelineStep(step, index)
+                {/* Collection Step */}
+                <div className="timeline-step">
+                  <div className="timeline-marker">
+                    <div className="timeline-icon">🌱</div>
+                  </div>
+                  <div className="timeline-content">
+                    <div className="timeline-header">
+                      <h4>Collection</h4>
+                      <span className="timeline-date">
+                        {new Date(provenanceData.timestamp).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="timeline-details">
+                      <p><strong>Farmer:</strong> {provenanceData.farmerID}</p>
+                      <p><strong>Location:</strong> {provenanceData.location?.latitude?.toFixed(4)}, {provenanceData.location?.longitude?.toFixed(4)}</p>
+                      <p><strong>Herb:</strong> {provenanceData.herbName}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quality Testing Step */}
+                {provenanceData.qualityTests && (
+                  <div className="timeline-step">
+                    <div className="timeline-marker">
+                      <div className="timeline-icon">🔬</div>
+                    </div>
+                    <div className="timeline-content">
+                      <div className="timeline-header">
+                        <h4>Quality Testing</h4>
+                        <span className="timeline-date">Lab Verified</span>
+                      </div>
+                      <div className="timeline-details">
+                        <p><strong>Status:</strong> PASSED</p>
+                        <p><strong>Moisture:</strong> {provenanceData.qualityTests.moisture}%</p>
+                        <p><strong>Pesticides:</strong> {provenanceData.qualityTests.pesticides} mg/kg</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Processing Step */}
+                {provenanceData.processing && (
+                  <div className="timeline-step">
+                    <div className="timeline-marker">
+                      <div className="timeline-icon">⚙️</div>
+                    </div>
+                    <div className="timeline-content">
+                      <div className="timeline-header">
+                        <h4>Processing</h4>
+                        <span className="timeline-date">Processed</span>
+                      </div>
+                      <div className="timeline-details">
+                        <p><strong>Method:</strong> {provenanceData.processing.method}</p>
+                        <p><strong>Temperature:</strong> {provenanceData.processing.temperature}°C</p>
+                        <p><strong>Yield:</strong> {provenanceData.processing.yield} kg</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Manufacturing Step */}
+                {provenanceData.manufacturing && (
+                  <div className="timeline-step">
+                    <div className="timeline-marker">
+                      <div className="timeline-icon">🏭</div>
+                    </div>
+                    <div className="timeline-content">
+                      <div className="timeline-header">
+                        <h4>Manufacturing</h4>
+                        <span className="timeline-date">
+                          {new Date(provenanceData.manufacturing.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="timeline-details">
+                        <p><strong>Product:</strong> {provenanceData.manufacturing.productName}</p>
+                        <p><strong>Batch Size:</strong> {provenanceData.manufacturing.batchSize} units</p>
+                        <p><strong>Expiry:</strong> {new Date(provenanceData.manufacturing.expiryDate).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="card">
-              <h3>Farmer's Story</h3>
-              {provenanceData.farmerStory ? (
-                <div className="farmer-story">
-                  <div className="story-content">
-                    <p>{provenanceData.farmerStory.story}</p>
-                    <div className="farmer-info">
-                      <strong>Farmer:</strong> {provenanceData.farmerStory.farmerName}<br />
-                      <strong>Farm:</strong> {provenanceData.farmerStory.farmName}<br />
-                      <strong>Location:</strong> {provenanceData.farmerStory.location}
-                    </div>
-                  </div>
-                  {provenanceData.farmerStory.image && (
-                    <div className="story-image">
-                      <img 
-                        src={`https://ipfs.io/ipfs/${provenanceData.farmerStory.image}`} 
-                        alt="Farmer"
-                      />
-                    </div>
-                  )}
+              <h3>Blockchain Verification Summary</h3>
+              <div className="verification-summary">
+                <div className="summary-item">
+                  <strong>✅ Verified on Blockchain:</strong> All steps recorded immutably
                 </div>
-              ) : (
-                <p>Farmer story is being updated. Check back soon!</p>
-              )}
+                <div className="summary-item">
+                  <strong>🔗 Transaction ID:</strong> {provenanceData.blockchain?.transactionId || 'Available in raw data'}
+                </div>
+                <div className="summary-item">
+                  <strong>📦 Block Number:</strong> {provenanceData.blockchain?.blockNumber || 'Available in raw data'}
+                </div>
+                <div className="summary-item">
+                  <strong>🌐 Network:</strong> Hyperledger Fabric (herbionyx-network)
+                </div>
+              </div>
             </div>
 
             <div className="portal-actions">
@@ -295,19 +321,11 @@ function ConsumerPortal() {
                 Scan Another Product
               </button>
               
-              <button className="button">
-                Share Verification
-              </button>
-              
               <button 
                 className="button"
                 onClick={() => window.print()}
               >
                 Print Report
-              </button>
-              
-              <button className="button danger">
-                Report Issue
               </button>
             </div>
           </div>

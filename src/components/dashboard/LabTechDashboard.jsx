@@ -3,6 +3,7 @@ import { useBlockchain } from '../../context/BlockchainContext';
 import QRScanner from '../common/QRScanner';
 import ImageUpload from '../common/ImageUpload';
 import QRGenerator from '../common/QRGenerator';
+import BlockchainVerification from '../common/BlockchainVerification';
 import { Microscope, TestTube, Camera, Upload, RotateCcw, CheckCircle } from 'lucide-react';
 
 function LabTechDashboard() {
@@ -38,21 +39,18 @@ function LabTechDashboard() {
   };
 
   const handleQRScan = async (data) => {
-    try {
-      const qrData = JSON.parse(data);
-      if (qrData.type === 'collection') {
-        const result = await queryChaincode('GetCollectionEvent', [qrData.eventId]);
-        if (result.success) {
-          setScannedData({
-            ...result.data,
-            qrData
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error processing QR scan:', error);
-      alert('Invalid QR code');
-    }
+    // The QR data is just the batch ID (e.g., "HERB12345")
+    console.log('Lab Tech scanned batch ID:', data);
+    setScannedData({ batchId: data });
+  };
+
+  const handleBlockchainVerification = (blockchainData) => {
+    // Update scanned data with blockchain verification results
+    setScannedData(prev => ({
+      ...prev,
+      ...blockchainData,
+      verified: true
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -112,7 +110,11 @@ function LabTechDashboard() {
       const result = await invokeChaincode('QualityAttestation', [JSON.stringify(attestationData)]);
       
       if (result.success && result.qrData) {
-        setQrCode(result.qrData);
+        setQrCode({
+          ...result.qrData,
+          batchId: result.batchId,
+          qrType: result.qrType
+        });
 
         // Reset form
         setTestData({
@@ -182,34 +184,15 @@ function LabTechDashboard() {
         
         <div className="scanner-area">
           <p className="scanner-instruction">
-            First, scan the QR code from the collection event to verify the herb source.
+            Scan the collection QR code to verify herb source with blockchain.
           </p>
           <QRScanner onScan={handleQRScan} />
           
           {scannedData && (
-            <div className="scanned-info">
-              <h3>Collection Details Verified</h3>
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">Species:</span>
-                  <span className="info-value">{scannedData.species}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Weight:</span>
-                  <span className="info-value">{scannedData.weight} kg</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Collected:</span>
-                  <span className="info-value">{new Date(scannedData.timestamp).toLocaleDateString()}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Location:</span>
-                  <span className="info-value">
-                    {scannedData.latitude?.toFixed(4)}, {scannedData.longitude?.toFixed(4)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            <BlockchainVerification 
+              batchId={scannedData.batchId}
+              onVerificationComplete={handleBlockchainVerification}
+            />
           )}
         </div>
       </div>
@@ -221,8 +204,23 @@ function LabTechDashboard() {
           <h2>Quality Test Results</h2>
         </div>
 
-        {scannedData ? (
+        {scannedData && scannedData.verified ? (
           <form onSubmit={handleSubmit} className="quality-form">
+            <div className="collection-summary">
+              <h4>Collection Data from Blockchain:</h4>
+              <div className="summary-grid">
+                <div className="summary-item">
+                  <span>Species: {scannedData.herbName}</span>
+                </div>
+                <div className="summary-item">
+                  <span>Farmer: {scannedData.farmerID}</span>
+                </div>
+                <div className="summary-item">
+                  <span>Location: {scannedData.location?.latitude?.toFixed(4)}, {scannedData.location?.longitude?.toFixed(4)}</span>
+                </div>
+              </div>
+            </div>
+
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Moisture Content (%)</label>
@@ -343,7 +341,20 @@ function LabTechDashboard() {
         
         <div className="qr-display-area">
           {qrCode ? (
-            <QRGenerator data={qrCode} size={256} showBlockchainButton={true} />
+            <div className="qr-container">
+              <QRGenerator 
+                data={qrCode.qrCodeUrl} 
+                batchId={qrCode.batchId}
+                qrType={qrCode.qrType}
+                size={256} 
+              />
+              <div className="qr-details">
+                <h4>Quality Attestation QR Generated</h4>
+                <p><strong>Batch ID:</strong> {qrCode.batchId}</p>
+                <p><strong>Type:</strong> {qrCode.qrType}</p>
+                <p>This QR includes collection + quality test data.</p>
+              </div>
+            </div>
           ) : (
             <div className="qr-placeholder">
               <Camera size={48} />
@@ -598,6 +609,61 @@ function LabTechDashboard() {
           padding: 60px;
           color: #6b7280;
           text-align: center;
+        }
+        
+        .collection-summary {
+          background: #f0f9ff;
+          border: 1px solid #bfdbfe;
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 20px;
+        }
+        
+        .collection-summary h4 {
+          color: #1e40af;
+          margin-bottom: 12px;
+          font-size: 16px;
+        }
+        
+        .summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 8px;
+        }
+        
+        .summary-item {
+          padding: 8px 12px;
+          background: white;
+          border-radius: 6px;
+          font-size: 14px;
+          color: #374151;
+        }
+        
+        .qr-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 20px;
+        }
+        
+        .qr-details {
+          text-align: center;
+          background: #f0f9ff;
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px solid #bfdbfe;
+        }
+        
+        .qr-details h4 {
+          color: #1e40af;
+          margin-bottom: 12px;
+          font-size: 16px;
+        }
+        
+        .qr-details p {
+          margin: 4px 0;
+          color: #374151;
+          font-size: 14px;
         }
 
         @media (max-width: 768px) {

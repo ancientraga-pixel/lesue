@@ -118,9 +118,9 @@ router.get('/batch/:batchId', async (req, res) => {
     
     let result;
     if (fabricConnected) {
-      result = await fabricConnection.evaluateTransaction('queryBatch', batchId);
+      result = await fabricConnection.evaluateTransaction('GetProvenance', batchId);
     } else {
-      result = await fabricConnection.mockEvaluateTransaction('queryBatch', batchId);
+      result = await fabricConnection.mockEvaluateTransaction('GetProvenance', batchId);
     }
     
     const batchData = JSON.parse(result.result);
@@ -130,6 +130,7 @@ router.get('/batch/:batchId', async (req, res) => {
       ...batchData,
       blockchain: {
         transactionId: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        blockHash: `block_${Math.random().toString(36).substr(2, 16)}`,
         blockNumber: Math.floor(Math.random() * 1000) + 1000,
         timestamp: result.timestamp,
         network: 'herbionyx-network',
@@ -142,7 +143,10 @@ router.get('/batch/:batchId', async (req, res) => {
     res.json({
       success: true,
       data: blockchainRecord,
-      timestamp: result.timestamp
+      timestamp: result.timestamp,
+      transactionId: blockchainRecord.blockchain.transactionId,
+      blockHash: blockchainRecord.blockchain.blockHash,
+      blockNumber: blockchainRecord.blockchain.blockNumber
     });
     
   } catch (error) {

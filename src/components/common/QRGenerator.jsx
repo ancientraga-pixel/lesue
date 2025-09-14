@@ -1,49 +1,46 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, Printer, Copy, Eye, Database } from 'lucide-react';
-import BlockchainRecordModal from './BlockchainRecordModal';
+import { Download, Printer, Copy, Eye } from 'lucide-react';
 
-function QRGenerator({ data, size = 256, showBlockchainButton = true }) {
+function QRGenerator({ data, size = 256, batchId, qrType = 'unknown' }) {
   const canvasRef = useRef(null);
   const [qrImage, setQrImage] = useState(null);
   const [showPreview, setShowPreview] = useState(true);
-  const [showBlockchainModal, setShowBlockchainModal] = useState(false);
-  const [batchId, setBatchId] = useState(null);
 
   useEffect(() => {
     if (data) {
-      processQRData();
+      generateRealQR();
     }
-  }, [data]);
+  }, [data, batchId]);
 
-  const processQRData = () => {
+  const generateRealQR = async () => {
     try {
-      // If data is already a data URL (from real QR generation)
-      if (typeof data === 'string' && data.startsWith('data:image')) {
-        setQrImage(data);
-        return;
-      }
+      // Generate QR code containing only the batch ID
+      const qrContent = batchId || data;
       
-      // If data is an object with qrCodeUrl
-      if (typeof data === 'object' && data.qrCodeUrl) {
-        setQrImage(data.qrCodeUrl);
-        setBatchId(data.batchId);
-        return;
-      }
+      const response = await fetch('/api/qr/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          data: qrContent,
+          options: {
+            width: size,
+            margin: 2,
+            color: {
+              dark: '#2d5016',
+              light: '#FFFFFF'
+            }
+          }
+        })
+      });
       
-      // If data is a string, try to parse it
-      if (typeof data === 'string') {
-        try {
-          const parsed = JSON.parse(data);
-          setBatchId(parsed.batchId || parsed.id);
-        } catch (e) {
-          // Not JSON, use as is
-        }
+      if (response.ok) {
+        const result = await response.json();
+        setQrImage(result.qrCodeUrl);
+      } else {
+        console.error('QR generation failed');
       }
-      
-      // Fallback: use data as is
-      setQrImage(data);
     } catch (error) {
-      console.error('QR data processing error:', error);
+      console.error('QR generation error:', error);
     }
   };
 
@@ -144,15 +141,6 @@ function QRGenerator({ data, size = 256, showBlockchainButton = true }) {
           <Eye size={16} />
           {showPreview ? 'Hide' : 'Show'} Preview
         </button>
-        {showBlockchainButton && batchId && (
-          <button 
-            onClick={() => setShowBlockchainModal(true)}
-            className="blockchain-button"
-          >
-            <Database size={16} />
-            View Blockchain Record
-          </button>
-        )}
       </div>
 
       {showPreview && (
@@ -175,7 +163,11 @@ function QRGenerator({ data, size = 256, showBlockchainButton = true }) {
           <div className="qr-info">
             <div className="data-preview">
               <h4>QR Data Preview:</h4>
-              <pre>{typeof data === 'object' && data.data ? data.data : (typeof data === 'string' ? data : JSON.stringify(data, null, 2))}</pre>
+              <pre>{batchId || data}</pre>
+              <div className="qr-info">
+                <p><strong>Type:</strong> {qrType}</p>
+                <p><strong>Contains:</strong> Batch ID only (for blockchain verification)</p>
+              </div>
             </div>
           </div>
         </div>
@@ -192,20 +184,14 @@ function QRGenerator({ data, size = 256, showBlockchainButton = true }) {
         </button>
         <button onClick={copyToClipboard} className="action-btn copy-btn">
           <Copy size={16} />
-          Copy Data
+          Copy Batch ID
         </button>
       </div>
 
-      {/* Blockchain Record Modal */}
-      <BlockchainRecordModal 
-        isOpen={showBlockchainModal}
-        onClose={() => setShowBlockchainModal(false)}
-        batchId={batchId}
-      />
-
       <div className="qr-instructions">
         <p>✅ QR code generated successfully!</p>
-        <p>Scan this code to verify traceability information.</p>
+        <p>This QR contains batch ID: <strong>{batchId || data}</strong></p>
+        <p>Scan this code to verify with blockchain.</p>
       </div>
 
       <style jsx>{`
@@ -409,6 +395,20 @@ function QRGenerator({ data, size = 256, showBlockchainButton = true }) {
           font-size: 48px;
           margin-bottom: 15px;
           opacity: 0.6;
+        }
+        
+        .qr-info {
+          margin-top: 10px;
+          padding: 10px;
+          background: #f0f9ff;
+          border-radius: 6px;
+          border: 1px solid #bfdbfe;
+        }
+        
+        .qr-info p {
+          margin: 4px 0;
+          font-size: 12px;
+          color: #1e40af;
         }
 
         @media (max-width: 768px) {

@@ -3,6 +3,7 @@ import { useBlockchain } from '../../context/BlockchainContext';
 import QRScanner from '../common/QRScanner';
 import ImageUpload from '../common/ImageUpload';
 import QRGenerator from '../common/QRGenerator';
+import BlockchainVerification from '../common/BlockchainVerification';
 import { Settings, Thermometer, Clock, Upload, RotateCcw, CheckCircle } from 'lucide-react';
 
 function ProcessorDashboard() {
@@ -36,25 +37,24 @@ function ProcessorDashboard() {
   };
 
   const handleQRScan = async (data) => {
-    try {
-      const qrData = JSON.parse(data);
-      if (qrData.type === 'quality' && qrData.passed) {
-        const result = await queryChaincode('GetQualityTest', [qrData.testId]);
-        if (result.success) {
-          setScannedData({
-            ...result.data,
-            qrData
-          });
-        }
-      } else if (qrData.type === 'quality' && !qrData.passed) {
-        alert('This batch failed quality tests and cannot be processed');
-      } else {
-        alert('Please scan a valid quality attestation QR code');
-      }
-    } catch (error) {
-      console.error('Error processing QR scan:', error);
-      alert('Invalid QR code');
+    // The QR data is just the batch ID (e.g., "HERB12345")
+    console.log('Processor scanned batch ID:', data);
+    setScannedData({ batchId: data });
+  };
+
+  const handleBlockchainVerification = (blockchainData) => {
+    // Check if quality tests passed
+    if (blockchainData.qualityTests && !blockchainData.qualityTests.passed) {
+      alert('This batch failed quality tests and cannot be processed');
+      return;
     }
+    
+    // Update scanned data with blockchain verification results
+    setScannedData(prev => ({
+      ...prev,
+      ...blockchainData,
+      verified: true
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -110,7 +110,11 @@ function ProcessorDashboard() {
       const result = await invokeChaincode('TransferCustody', [JSON.stringify(custodyData)]);
       
       if (result.success && result.qrData) {
-        setQrCode(result.qrData);
+        setQrCode({
+          ...result.qrData,
+          batchId: result.batchId,
+          qrType: result.qrType
+        });
 
         // Reset form
         setProcessData({
@@ -172,32 +176,15 @@ function ProcessorDashboard() {
         
         <div className="scanner-area">
           <p className="scanner-instruction">
-            First, scan the QR code from the quality attestation to verify the herb quality.
+            Scan the quality attestation QR code to verify herb quality with blockchain.
           </p>
           <QRScanner onScan={handleQRScan} />
           
           {scannedData && (
-            <div className="scanned-info">
-              <h3>Quality Verified - Ready for Processing</h3>
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">Species:</span>
-                  <span className="info-value">{scannedData.species}</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Weight:</span>
-                  <span className="info-value">{scannedData.weight} kg</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Quality Status:</span>
-                  <span className="status-badge status-passed">PASSED</span>
-                </div>
-                <div className="info-item">
-                  <span className="info-label">Test Date:</span>
-                  <span className="info-value">{new Date(scannedData.testDate).toLocaleDateString()}</span>
-                </div>
-              </div>
-            </div>
+            <BlockchainVerification 
+              batchId={scannedData.batchId}
+              onVerificationComplete={handleBlockchainVerification}
+            />
           )}
         </div>
       </div>
@@ -209,8 +196,22 @@ function ProcessorDashboard() {
           <h2>Processing Details</h2>
         </div>
 
-        {scannedData ? (
+        {scannedData && scannedData.verified ? (
           <form onSubmit={handleSubmit} className="processing-form">
+            <div className="previous-steps-summary">
+              <h4>Previous Steps from Blockchain:</h4>
+              <div className="steps-grid">
+                <div className="step-item">
+                  <span>🌱 Collection: {scannedData.herbName} by {scannedData.farmerID}</span>
+                </div>
+                {scannedData.qualityTests && (
+                  <div className="step-item">
+                    <span>🔬 Quality: Passed (Moisture: {scannedData.qualityTests.moisture}%)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Processing Method</label>
@@ -315,7 +316,20 @@ function ProcessorDashboard() {
         
         <div className="qr-display-area">
           {qrCode ? (
-            <QRGenerator data={qrCode} size={256} showBlockchainButton={true} />
+            <div className="qr-container">
+              <QRGenerator 
+                data={qrCode.qrCodeUrl} 
+                batchId={qrCode.batchId}
+                qrType={qrCode.qrType}
+                size={256} 
+              />
+              <div className="qr-details">
+                <h4>Processing QR Generated</h4>
+                <p><strong>Batch ID:</strong> {qrCode.batchId}</p>
+                <p><strong>Type:</strong> {qrCode.qrType}</p>
+                <p>This QR includes collection + quality + processing data.</p>
+              </div>
+            </div>
           ) : (
             <div className="qr-placeholder">
               <CheckCircle size={48} />
@@ -554,6 +568,61 @@ function ProcessorDashboard() {
           padding: 60px;
           color: #6b7280;
           text-align: center;
+        }
+        
+        .previous-steps-summary {
+          background: #f0f9ff;
+          border: 1px solid #bfdbfe;
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 20px;
+        }
+        
+        .previous-steps-summary h4 {
+          color: #1e40af;
+          margin-bottom: 12px;
+          font-size: 16px;
+        }
+        
+        .steps-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        
+        .step-item {
+          padding: 8px 12px;
+          background: white;
+          border-radius: 6px;
+          font-size: 14px;
+          color: #374151;
+        }
+        
+        .qr-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 20px;
+        }
+        
+        .qr-details {
+          text-align: center;
+          background: #f0f9ff;
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px solid #bfdbfe;
+        }
+        
+        .qr-details h4 {
+          color: #1e40af;
+          margin-bottom: 12px;
+          font-size: 16px;
+        }
+        
+        .qr-details p {
+          margin: 4px 0;
+          color: #374151;
+          font-size: 14px;
         }
 
         @media (max-width: 768px) {

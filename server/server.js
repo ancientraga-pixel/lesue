@@ -401,8 +401,8 @@ app.post('/api/ipfs/upload', upload.single('file'), async (req, res) => {
 // QR Code generation
 app.post('/api/qr/generate', async (req, res) => {
   try {
-    const { data } = req.body;
-    const result = await realServices.generateQR(data);
+    const { data, options } = req.body;
+    const result = await realServices.generateQR(data, options);
     res.json(result);
   } catch (error) {
     console.error('QR generation error:', error);

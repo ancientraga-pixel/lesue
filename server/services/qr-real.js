@@ -15,28 +15,25 @@ class RealQRService {
     };
   }
 
-  async generateQR(data) {
+  async generateQR(batchId, options = {}) {
     try {
-      // Create structured QR data
-      const qrData = {
-        id: this.generateQRId(),
-        type: data.type || 'unknown',
-        batchId: data.batchId || data.eventId || data.id,
-        timestamp: new Date().toISOString(),
-        network: 'herbionyx',
-        version: '1.0'
+      // QR code contains only the batch ID for blockchain verification
+      const qrContent = batchId;
+      
+      const qrOptions = {
+        ...this.qrOptions,
+        ...options
       };
 
       // Generate actual QR code
-      const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), this.qrOptions);
+      const qrCodeDataURL = await QRCode.toDataURL(qrContent, qrOptions);
       
       return {
-        id: qrData.id,
+        id: this.generateQRId(),
         qrCodeUrl: qrCodeDataURL,
-        data: JSON.stringify(qrData),
-        timestamp: qrData.timestamp,
-        type: qrData.type,
-        batchId: qrData.batchId
+        data: qrContent,
+        timestamp: new Date().toISOString(),
+        batchId: batchId
       };
     } catch (error) {
       console.error('QR generation error:', error);
@@ -48,22 +45,19 @@ class RealQRService {
     return 'QR_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
 
-  async parseQR(qrDataString) {
+  async parseQR(qrText) {
     try {
-      const data = JSON.parse(qrDataString);
+      // QR should contain only batch ID (e.g., "HERB12345")
+      const batchId = qrText.trim();
       
-      // Validate QR structure
-      if (!data.id || !data.type || !data.network) {
-        throw new Error('Invalid QR code structure');
-      }
-      
-      if (data.network !== 'herbionyx') {
-        throw new Error('QR code is not from HERBIONYX network');
+      // Validate batch ID format
+      if (!batchId.match(/^(HERB|BATCH|EVT|TEST|PROC)[\w_]+$/i)) {
+        throw new Error('Invalid batch ID format');
       }
       
       return {
         valid: true,
-        data: data
+        batchId: batchId
       };
     } catch (error) {
       return {
