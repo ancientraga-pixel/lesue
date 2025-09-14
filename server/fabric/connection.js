@@ -351,6 +351,16 @@ BKfUei9QVL812XFjC1+MOCK+CERTIFICATE+DATA+HERE+FOR+DEMO+PURPOSES
           batchId: args[0],
           productName: 'Premium Ashwagandha Powder',
           species: 'Ashwagandha',
+          manufacturingDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          productImage: 'https://images.pexels.com/photos/4021775/pexels-photo-4021775.jpeg',
+          farmerStory: 'Grown with care by local farmers in Rajasthan using traditional organic methods passed down through generations.',
+          qualityTests: {
+            moisture: 8.5,
+            pesticides: 0.005,
+            heavyMetals: 2.1,
+            passed: true
+          },
           journey: [
             {
               stage: 'Collection',

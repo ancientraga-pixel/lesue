@@ -301,11 +301,76 @@ app.delete('/api/admin/permitted-zones/:zoneId', (req, res) => {
 
 app.get('/api/admin/permitted-herbs', (req, res) => {
   const herbs = [
-    { id: 'herb_1', name: 'Ashwagandha', scientificName: 'Withania somnifera', seasonStart: 'October', seasonEnd: 'March', maxYieldPerCollection: 50, active: true },
-    { id: 'herb_2', name: 'Turmeric', scientificName: 'Curcuma longa', seasonStart: 'January', seasonEnd: 'April', maxYieldPerCollection: 60, active: true },
-    { id: 'herb_3', name: 'Neem', scientificName: 'Azadirachta indica', seasonStart: 'January', seasonEnd: 'December', maxYieldPerCollection: 75, active: true },
-    { id: 'herb_4', name: 'Tulsi', scientificName: 'Ocimum sanctum', seasonStart: 'January', seasonEnd: 'December', maxYieldPerCollection: 50, active: true },
-    { id: 'herb_5', name: 'Brahmi', scientificName: 'Bacopa monnieri', seasonStart: 'October', seasonEnd: 'March', maxYieldPerCollection: 45, active: true }
+    { 
+      id: 'herb_1', 
+      name: 'Ashwagandha', 
+      scientificName: 'Withania somnifera', 
+      seasonStart: 'October', 
+      seasonEnd: 'March', 
+      maxYieldPerCollection: 50, 
+      active: true,
+      qualityStandards: {
+        moisture: { max: 12, unit: '%' },
+        pesticides: { max: 0.01, unit: 'mg/kg' },
+        heavyMetals: { max: 10, unit: 'ppm' }
+      }
+    },
+    { 
+      id: 'herb_2', 
+      name: 'Turmeric', 
+      scientificName: 'Curcuma longa', 
+      seasonStart: 'January', 
+      seasonEnd: 'April', 
+      maxYieldPerCollection: 60, 
+      active: true,
+      qualityStandards: {
+        moisture: { max: 10, unit: '%' },
+        pesticides: { max: 0.01, unit: 'mg/kg' },
+        heavyMetals: { max: 8, unit: 'ppm' }
+      }
+    },
+    { 
+      id: 'herb_3', 
+      name: 'Neem', 
+      scientificName: 'Azadirachta indica', 
+      seasonStart: 'January', 
+      seasonEnd: 'December', 
+      maxYieldPerCollection: 75, 
+      active: true,
+      qualityStandards: {
+        moisture: { max: 14, unit: '%' },
+        pesticides: { max: 0.005, unit: 'mg/kg' },
+        heavyMetals: { max: 12, unit: 'ppm' }
+      }
+    },
+    { 
+      id: 'herb_4', 
+      name: 'Tulsi', 
+      scientificName: 'Ocimum sanctum', 
+      seasonStart: 'January', 
+      seasonEnd: 'December', 
+      maxYieldPerCollection: 50, 
+      active: true,
+      qualityStandards: {
+        moisture: { max: 11, unit: '%' },
+        pesticides: { max: 0.01, unit: 'mg/kg' },
+        heavyMetals: { max: 9, unit: 'ppm' }
+      }
+    },
+    { 
+      id: 'herb_5', 
+      name: 'Brahmi', 
+      scientificName: 'Bacopa monnieri', 
+      seasonStart: 'October', 
+      seasonEnd: 'March', 
+      maxYieldPerCollection: 45, 
+      active: true,
+      qualityStandards: {
+        moisture: { max: 13, unit: '%' },
+        pesticides: { max: 0.008, unit: 'mg/kg' },
+        heavyMetals: { max: 11, unit: 'ppm' }
+      }
+    }
   ];
   res.json(herbs);
 });
