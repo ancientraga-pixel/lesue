@@ -1,43 +1,21 @@
-import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { createServer } from 'vite';
-
-// Import services
-import geolocationService from './services/geolocation.js';
-import ipfsService from './services/ipfs.js';
-import smsService from './services/sms.js';
-import qrService from './services/qr.js';
-import database from './database/database.js';
-import smsRoutes from './routes/sms.js';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Create Vite server in middleware mode
-let vite;
-if (process.env.NODE_ENV !== 'production') {
-  vite = await createServer({
-    server: { middlewareMode: true },
-    appType: 'spa'
-  });
-  app.use(vite.ssrFixStacktrace);
-  app.use(vite.middlewares);
-}
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-// FIXED: Ensure proper JSON body parsing with size limit
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static('public'));
 
 // Configure multer for file uploads
 const upload = multer({
@@ -47,12 +25,8 @@ const upload = multer({
   },
 });
 
-// SMS Routes
-app.use('/api/sms', smsRoutes);
-
-// Mock database (in production, use proper database)
+// Mock database
 let users = [
-  // Special developer/tester accounts - always available
   {
     id: 'dev_admin_001',
     username: 'dev_admin',
@@ -118,77 +92,101 @@ let users = [
 let pendingUsers = [];
 let batches = [];
 let transactions = [];
+let smsTransactions = [];
+let collections = [];
+let qualityTests = [];
+let processings = [];
+let finalBatches = [];
 
-// Authentication routes
-app.post('/api/auth/login', (req, res) => {
-  const { username, password: rawPassword, role } = req.body;
-  
-  console.log('Login attempt:', { username, role });
-  console.log('Full request body:', JSON.stringify(req.body, null, 2));
-  
-  // Ensure we have both username and password
-  if (!username || !rawPassword) {
-    console.log('Missing credentials');
-    res.setHeader('Content-Type', 'application/json');
-    return res.status(400).send(JSON.stringify({ error: 'Username and password are required' }));
-  }
-  
-  if (!role) {
-    console.log('Missing role');
-    res.setHeader('Content-Type', 'application/json');
-    return res.status(400).send(JSON.stringify({ error: 'Role selection is required' }));
-  }
-  
-  const trimmedUsername = String(username).trim();
-  const trimmedPassword = String(rawPassword).trim();
-  
-  console.log('Searching for user:', trimmedUsername);
-  console.log('Available users:', users.map(u => ({ username: u.username, role: u.role })));
-  
-  // Find existing user or create new one
-  let user = users.find(u => u.username === trimmedUsername);
-  
-  if (!user) {
-    console.log('User not found, creating new user');
-    // Create new user account
-    const newUser = {
-      id: `${role.toLowerCase()}_${Date.now()}`,
-      username: trimmedUsername,
-      password: trimmedPassword,
-      name: generateNameFromUsername(trimmedUsername),
-      email: trimmedUsername.includes('@') ? trimmedUsername : `${trimmedUsername}@herbionyx.com`,
-      role: role,
-      organization: getOrganizationByRole(role),
-      approved: true,
-      createdAt: new Date().toISOString()
+// Mock services
+const mockServices = {
+  // IPFS Service
+  uploadToIPFS: async (file) => {
+    const mockHash = 'Qm' + Math.random().toString(36).substr(2, 44);
+    return {
+      hash: mockHash,
+      url: `https://ipfs.io/ipfs/${mockHash}`,
+      size: file.size || Math.floor(Math.random() * 1000000)
     };
+  },
+
+  // QR Service
+  generateQR: async (data) => {
+    const qrId = `QR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return {
+      id: qrId,
+      qrCodeUrl: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==`,
+      data: typeof data === 'string' ? data : JSON.stringify(data),
+      timestamp: new Date().toISOString()
+    };
+  },
+
+  // Geolocation Service
+  getLocation: () => {
+    const mockLocations = [
+      { latitude: 26.9124, longitude: 75.7873, name: 'Rajasthan Zone 1' },
+      { latitude: 23.0225, longitude: 72.5714, name: 'Gujarat Zone 1' },
+      { latitude: 19.0760, longitude: 72.8777, name: 'Maharashtra Zone 1' },
+      { latitude: 12.9716, longitude: 77.5946, name: 'Karnataka Zone 1' },
+      { latitude: 13.0827, longitude: 80.2707, name: 'Tamil Nadu Zone 1' }
+    ];
+    const randomLocation = mockLocations[Math.floor(Math.random() * mockLocations.length)];
+    return {
+      ...randomLocation,
+      accuracy: 500,
+      source: 'mock'
+    };
+  },
+
+  // SMS Service
+  sendSMS: async (phoneNumber, message) => {
+    console.log(`📱 Mock SMS to ${phoneNumber}: ${message}`);
+    return {
+      success: true,
+      messageId: `mock_${Date.now()}`,
+      provider: 'mock'
+    };
+  },
+
+  parseSMSCommand: (message) => {
+    const parts = message.trim().toUpperCase().split(/\s+/);
     
-    users.push(newUser);
-    user = newUser;
-    console.log('Created new user:', user.username, 'as', user.role);
-  } else {
-    console.log('Found existing user:', user.username);
-    // Verify password for existing user
-    if (user.password !== trimmedPassword) {
-      console.log('Password mismatch for user:', user.username);
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(401).send(JSON.stringify({ error: 'Invalid password' }));
+    if (parts.length >= 3 && parts[0] === 'COL') {
+      const speciesMap = {
+        'ASH': 'Ashwagandha',
+        'TUR': 'Turmeric', 
+        'NEE': 'Neem',
+        'TUL': 'Tulsi',
+        'BRA': 'Brahmi',
+        'GIL': 'Giloy',
+        'AML': 'Amla',
+        'ARJ': 'Arjuna'
+      };
+      
+      let species = parts[1];
+      if (speciesMap[species]) {
+        species = speciesMap[species];
+      }
+      
+      const weightStr = parts[2].replace(/[^\d.]/g, '');
+      const weight = parseFloat(weightStr);
+      
+      if (weight && weight > 0) {
+        return {
+          command: 'COLLECTION',
+          species: species,
+          weight: weight,
+          valid: true
+        };
+      }
     }
     
-    // Update role if different
-    if (user.role !== role) {
-      user.role = role;
-      user.organization = getOrganizationByRole(role);
-      console.log('Updated user role:', user.username, 'to', user.role);
-    }
+    return { 
+      valid: false, 
+      error: 'Invalid SMS format. Use: COL [SPECIES] [WEIGHT]kg (e.g., COL ASH 25kg)' 
+    };
   }
-  
-  const { password, ...userWithoutPassword } = user;
-  console.log('Login successful for:', userWithoutPassword.username, 'as', userWithoutPassword.role);
-  
-  // Ensure we send a proper JSON response
-  res.status(200).json(userWithoutPassword);
-});
+};
 
 // Helper functions
 function generateNameFromUsername(username) {
@@ -210,10 +208,63 @@ function getOrganizationByRole(role) {
   return orgMap[role] || 'Unknown';
 }
 
+// Authentication routes
+app.post('/api/auth/login', (req, res) => {
+  const { username, password: rawPassword, role } = req.body;
+  
+  console.log('Login attempt:', { username, role });
+  
+  if (!username || !rawPassword) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+  
+  if (!role) {
+    return res.status(400).json({ error: 'Role selection is required' });
+  }
+  
+  const trimmedUsername = String(username).trim();
+  const trimmedPassword = String(rawPassword).trim();
+  
+  // Find existing user or create new one
+  let user = users.find(u => u.username === trimmedUsername);
+  
+  if (!user) {
+    // Create new user account
+    const newUser = {
+      id: `${role.toLowerCase()}_${Date.now()}`,
+      username: trimmedUsername,
+      password: trimmedPassword,
+      name: generateNameFromUsername(trimmedUsername),
+      email: trimmedUsername.includes('@') ? trimmedUsername : `${trimmedUsername}@herbionyx.com`,
+      role: role,
+      organization: getOrganizationByRole(role),
+      approved: true,
+      createdAt: new Date().toISOString()
+    };
+    
+    users.push(newUser);
+    user = newUser;
+    console.log('Created new user:', user.username, 'as', user.role);
+  } else {
+    // Verify password for existing user
+    if (user.password !== trimmedPassword) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+    
+    // Update role if different
+    if (user.role !== role) {
+      user.role = role;
+      user.organization = getOrganizationByRole(role);
+    }
+  }
+  
+  const { password, ...userWithoutPassword } = user;
+  res.status(200).json(userWithoutPassword);
+});
+
 app.post('/api/auth/register', (req, res) => {
   const userData = req.body;
   
-  // Check if username already exists
   if (users.find(u => u.username === userData.username) || pendingUsers.find(u => u.username === userData.username)) {
     return res.status(400).json({ message: 'Username already exists' });
   }
@@ -226,7 +277,6 @@ app.post('/api/auth/register', (req, res) => {
   };
   
   pendingUsers.push(newUser);
-  
   res.json({ message: 'Registration submitted for admin approval' });
 });
 
@@ -248,8 +298,6 @@ app.post('/api/admin/approve-user', (req, res) => {
   if (approved) {
     user.approved = true;
     users.push(user);
-    
-    // Send approval email (mock)
     console.log(`User ${user.name} approved for role ${user.role}`);
   }
   
@@ -257,54 +305,76 @@ app.post('/api/admin/approve-user', (req, res) => {
   res.json({ success: true });
 });
 
-// Auto-login route
-app.post('/api/auth/auto-login', (req, res) => {
-  if (process.env.AUTO_LOGIN_ENABLED === 'true') {
-    // Auto-login as collector for demo
-    const user = users.find(u => u.username === 'collector1');
-    if (user) {
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
-    } else {
-      res.status(404).json({ error: 'Auto-login user not found' });
-    }
-  } else {
-    res.status(403).json({ error: 'Auto-login disabled' });
-  }
-});
-
 app.get('/api/admin/system-stats', (req, res) => {
   res.json({
     totalUsers: users.length,
-    totalBatches: batches.length,
+    totalBatches: finalBatches.length,
     totalRecalls: 0,
     networkHealth: 100
   });
 });
 
-// Geolocation routes
-app.post('/api/geolocation/cell-tower', async (req, res) => {
-  try {
-    const { mcc, mnc, lac, cellid } = req.body;
-    const location = await geolocationService.getCellTowerLocation({ mcc, mnc, lac, cellid });
-    
-    // Validate against permitted zones
-    const permittedZones = database.getPermittedZones();
-    const validation = geolocationService.validatePermittedZone(
-      location.latitude, 
-      location.longitude, 
-      permittedZones
-    );
-    
-    res.json({
-      location,
-      validation,
-      permittedZones
-    });
-  } catch (error) {
-    console.error('Cell tower location error:', error);
-    res.status(500).json({ error: 'Failed to get cell tower location' });
-  }
+app.get('/api/admin/permitted-zones', (req, res) => {
+  const zones = [
+    {
+      id: 'zone_1',
+      name: 'Rajasthan Zone 1',
+      minLat: 26.9124,
+      minLng: 75.7873,
+      maxLat: 27.2124,
+      maxLng: 76.0873,
+      maxYield: 500,
+      active: true
+    },
+    {
+      id: 'zone_2',
+      name: 'Gujarat Zone 1',
+      minLat: 23.0225,
+      minLng: 72.5714,
+      maxLat: 23.3225,
+      maxLng: 72.8714,
+      maxYield: 400,
+      active: true
+    },
+    {
+      id: 'zone_3',
+      name: 'Maharashtra Zone 1',
+      minLat: 19.0760,
+      minLng: 72.8777,
+      maxLat: 19.3760,
+      maxLng: 73.1777,
+      maxYield: 600,
+      active: true
+    }
+  ];
+  res.json(zones);
+});
+
+app.post('/api/admin/permitted-zones', (req, res) => {
+  res.json({ success: true, message: 'Zone added successfully' });
+});
+
+app.delete('/api/admin/permitted-zones/:zoneId', (req, res) => {
+  res.json({ success: true, message: 'Zone deleted successfully' });
+});
+
+app.get('/api/admin/permitted-herbs', (req, res) => {
+  const herbs = [
+    { id: 'herb_1', name: 'Ashwagandha', scientificName: 'Withania somnifera', seasonStart: 'October', seasonEnd: 'March', maxYieldPerCollection: 50, active: true },
+    { id: 'herb_2', name: 'Turmeric', scientificName: 'Curcuma longa', seasonStart: 'January', seasonEnd: 'April', maxYieldPerCollection: 60, active: true },
+    { id: 'herb_3', name: 'Neem', scientificName: 'Azadirachta indica', seasonStart: 'January', seasonEnd: 'December', maxYieldPerCollection: 75, active: true },
+    { id: 'herb_4', name: 'Tulsi', scientificName: 'Ocimum sanctum', seasonStart: 'January', seasonEnd: 'December', maxYieldPerCollection: 50, active: true },
+    { id: 'herb_5', name: 'Brahmi', scientificName: 'Bacopa monnieri', seasonStart: 'October', seasonEnd: 'March', maxYieldPerCollection: 45, active: true }
+  ];
+  res.json(herbs);
+});
+
+app.post('/api/admin/permitted-herbs', (req, res) => {
+  res.json({ success: true, message: 'Herb added successfully' });
+});
+
+app.delete('/api/admin/permitted-herbs/:herbId', (req, res) => {
+  res.json({ success: true, message: 'Herb deleted successfully' });
 });
 
 // IPFS routes
@@ -314,21 +384,8 @@ app.post('/api/ipfs/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file provided' });
     }
     
-    const metadata = req.body.metadata ? JSON.parse(req.body.metadata) : {};
-    const result = await ipfsService.uploadFile(req.file.buffer, req.file.originalname, metadata);
-    
-    let metadataHash = null;
-    if (metadata && Object.keys(metadata).length > 0) {
-      const metadataResult = await ipfsService.uploadJSON(metadata, `${req.file.originalname}_metadata.json`);
-      metadataHash = metadataResult.hash;
-    }
-    
-    res.json({
-      hash: result.hash,
-      metadataHash: metadataHash,
-      url: result.url,
-      size: result.size
-    });
+    const result = await mockServices.uploadToIPFS(req.file);
+    res.json(result);
   } catch (error) {
     console.error('IPFS upload error:', error);
     res.status(500).json({ error: 'Failed to upload to IPFS' });
@@ -338,12 +395,8 @@ app.post('/api/ipfs/upload', upload.single('file'), async (req, res) => {
 // QR Code generation
 app.post('/api/qr/generate', async (req, res) => {
   try {
-    const { data, previousQRs = [] } = req.body;
-    const result = await qrService.generateChainedQR(data, previousQRs);
-    
-    // Save QR to database
-    database.saveQRCode(result);
-    
+    const { data } = req.body;
+    const result = await mockServices.generateQR(data);
     res.json(result);
   } catch (error) {
     console.error('QR generation error:', error);
@@ -351,132 +404,128 @@ app.post('/api/qr/generate', async (req, res) => {
   }
 });
 
-// QR Code validation
-app.post('/api/qr/validate', async (req, res) => {
-  try {
-    const { qrData } = req.body;
-    const validation = qrService.validateQRChain(qrData);
-    res.json(validation);
-  } catch (error) {
-    console.error('QR validation error:', error);
-    res.status(500).json({ error: 'Failed to validate QR code' });
-  }
-});
-
 // SMS routes
-app.post('/api/sms/send', async (req, res) => {
+app.post('/api/sms/webhook', async (req, res) => {
   try {
-    const { phoneNumber, message } = req.body;
-    const result = await smsService.sendSMS(phoneNumber, message);
-    res.json(result);
-  } catch (error) {
-    console.error('SMS sending error:', error);
-    res.status(500).json({ error: 'Failed to send SMS' });
-  }
-});
-
-app.post('/api/sms/parse-command', async (req, res) => {
-  try {
-    const { message, phoneNumber } = req.body;
-    const parsed = smsService.parseSMSCommand(message);
+    const { From: phoneNumber, Body: message } = req.body;
+    
+    const parsed = mockServices.parseSMSCommand(message);
     
     if (parsed.valid) {
-      // Process the collection command
-      const location = await geolocationService.getCellTowerLocation({
-        // Mock cell data for SMS users
-        mcc: 404, mnc: 10, lac: 1234, cellid: 5678
-      });
+      const location = mockServices.getLocation();
       
-      // Create collection event
       const collectionData = {
-        ...parsed,
-        location,
-        phoneNumber,
+        species: parsed.species,
+        weight: parsed.weight,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        phoneNumber: phoneNumber,
         timestamp: new Date().toISOString(),
-        source: 'sms'
+        source: 'sms',
+        rawMessage: message
       };
       
-      // Generate QR and send notification
-      const qrResult = await qrService.generateQR({
+      const qrResult = await mockServices.generateQR({
         type: 'collection',
+        eventId: `SMS_${Date.now()}`,
         data: collectionData,
-        id: `COL_${Date.now()}`
+        timestamp: new Date().toISOString()
       });
       
-      await smsService.sendQRNotification(phoneNumber, qrResult, 'Collection');
+      const smsTransaction = {
+        id: `SMS_${Date.now()}`,
+        phoneNumber: phoneNumber,
+        message: message,
+        parsed: parsed,
+        location: location,
+        collectionData: collectionData,
+        qrCode: qrResult,
+        timestamp: new Date().toISOString(),
+        status: 'processed'
+      };
       
-      res.json({ success: true, collection: collectionData, qr: qrResult });
+      smsTransactions.push(smsTransaction);
+      
+      await mockServices.sendSMS(phoneNumber, `HERBIONYX: Collection recorded! Species: ${parsed.species}, Weight: ${parsed.weight}kg. QR ID: ${qrResult.id}. Thank you!`);
+      
+      res.json({ success: true, transaction: smsTransaction });
     } else {
+      await mockServices.sendSMS(phoneNumber, `HERBIONYX: Invalid format. Please send: COL [SPECIES] [WEIGHT]kg. Example: COL ASH 25kg`);
       res.status(400).json({ error: parsed.error });
     }
   } catch (error) {
-    console.error('SMS command parsing error:', error);
-    res.status(500).json({ error: 'Failed to parse SMS command' });
+    console.error('SMS webhook error:', error);
+    res.status(500).json({ error: 'Failed to process SMS' });
   }
 });
 
-// Database management routes
-app.get('/api/admin/permitted-zones', (req, res) => {
-  const zones = database.getPermittedZones();
-  res.json(zones);
+app.get('/api/sms/transactions', (req, res) => {
+  const recentTransactions = smsTransactions
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 20)
+    .map(tx => ({
+      id: tx.id,
+      phoneNumber: tx.phoneNumber,
+      species: tx.parsed.species,
+      weight: tx.parsed.weight,
+      latitude: tx.location.latitude,
+      longitude: tx.location.longitude,
+      timestamp: tx.timestamp,
+      status: tx.status,
+      source: 'sms'
+    }));
+  
+  res.json(recentTransactions);
 });
 
-app.post('/api/admin/permitted-zones', (req, res) => {
-  const success = database.addPermittedZone(req.body);
-  if (success) {
-    res.json({ success: true, message: 'Zone added successfully' });
-  } else {
-    res.status(500).json({ error: 'Failed to add zone' });
-  }
-});
-
-app.put('/api/admin/permitted-zones/:zoneId', (req, res) => {
-  const success = database.updatePermittedZone(req.params.zoneId, req.body);
-  if (success) {
-    res.json({ success: true, message: 'Zone updated successfully' });
-  } else {
-    res.status(500).json({ error: 'Failed to update zone' });
-  }
-});
-
-app.delete('/api/admin/permitted-zones/:zoneId', (req, res) => {
-  const success = database.deletePermittedZone(req.params.zoneId);
-  if (success) {
-    res.json({ success: true, message: 'Zone deleted successfully' });
-  } else {
-    res.status(500).json({ error: 'Failed to delete zone' });
-  }
-});
-
-app.get('/api/admin/permitted-herbs', (req, res) => {
-  const herbs = database.getPermittedHerbs();
-  res.json(herbs);
-});
-
-app.post('/api/admin/permitted-herbs', (req, res) => {
-  const success = database.addPermittedHerb(req.body);
-  if (success) {
-    res.json({ success: true, message: 'Herb added successfully' });
-  } else {
-    res.status(500).json({ error: 'Failed to add herb' });
-  }
-});
-
-app.put('/api/admin/permitted-herbs/:herbId', (req, res) => {
-  const success = database.updatePermittedHerb(req.params.herbId, req.body);
-  if (success) {
-    res.json({ success: true, message: 'Herb updated successfully' });
-  } else {
-    res.status(500).json({ error: 'Failed to update herb' });
-  }
-});
-
-app.delete('/api/admin/permitted-herbs/:herbId', (req, res) => {
-  const success = database.deletePermittedHerb(req.params.herbId);
-  if (success) {
-    res.json({ success: true, message: 'Herb deleted successfully' });
-  } else {
-    res.status(500).json({ error: 'Failed to delete herb' });
+app.post('/api/sms/simulate', async (req, res) => {
+  try {
+    const { phoneNumber, species, weight } = req.body;
+    
+    const message = `COL ${species.substring(0, 3).toUpperCase()} ${weight}kg`;
+    const parsed = mockServices.parseSMSCommand(message);
+    
+    if (parsed.valid) {
+      const location = mockServices.getLocation();
+      
+      const collectionData = {
+        species: species,
+        weight: parseFloat(weight),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        phoneNumber: phoneNumber,
+        timestamp: new Date().toISOString(),
+        source: 'sms_simulation',
+        rawMessage: message
+      };
+      
+      const qrResult = await mockServices.generateQR({
+        type: 'collection',
+        eventId: `SIM_${Date.now()}`,
+        data: collectionData,
+        timestamp: new Date().toISOString()
+      });
+      
+      const smsTransaction = {
+        id: `SIM_${Date.now()}`,
+        phoneNumber: phoneNumber,
+        message: message,
+        parsed: { species, weight: parseFloat(weight), valid: true },
+        location: location,
+        collectionData: collectionData,
+        qrCode: qrResult,
+        timestamp: new Date().toISOString(),
+        status: 'processed'
+      };
+      
+      smsTransactions.push(smsTransaction);
+      res.json({ success: true, transaction: smsTransaction });
+    } else {
+      res.status(400).json({ error: 'Invalid simulation data' });
+    }
+  } catch (error) {
+    console.error('SMS simulation error:', error);
+    res.status(500).json({ error: 'Failed to simulate SMS' });
   }
 });
 
@@ -485,10 +534,8 @@ app.post('/api/fabric/invoke', async (req, res) => {
   try {
     const { function: functionName, args } = req.body;
     
-    // Mock chaincode invocation
     console.log(`Invoking chaincode function: ${functionName}`, args);
     
-    // Simulate transaction processing
     const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     let result = {
@@ -501,43 +548,85 @@ app.post('/api/fabric/invoke', async (req, res) => {
     // Function-specific responses
     switch (functionName) {
       case 'RecordCollectionEvent':
-        result.eventId = `EVT_${Date.now()}`;
-        // Generate chained QR for collection
-        const collectionQR = await qrService.generateQR({
+        const eventId = `EVT_${Date.now()}`;
+        result.eventId = eventId;
+        
+        // Parse collection data
+        const collectionEventData = JSON.parse(args[0]);
+        const collection = {
+          eventId: eventId,
+          ...collectionEventData,
+          status: 'COLLECTED',
+          transactionId: transactionId
+        };
+        collections.push(collection);
+        
+        const collectionQR = await mockServices.generateQR({
           type: 'collection',
-          eventId: result.eventId,
+          eventId: eventId,
           timestamp: new Date().toISOString()
         });
         result.qrData = collectionQR;
         break;
+        
       case 'QualityAttestation':
-        result.testId = `TEST_${Date.now()}`;
-        // Generate chained QR for quality
-        const qualityQR = await qrService.generateChainedQR({
+        const testId = `TEST_${Date.now()}`;
+        result.testId = testId;
+        
+        const qualityData = JSON.parse(args[0]);
+        const qualityTest = {
+          testId: testId,
+          ...qualityData,
+          transactionId: transactionId
+        };
+        qualityTests.push(qualityTest);
+        
+        const qualityQR = await mockServices.generateQR({
           type: 'quality',
-          testId: result.testId,
+          testId: testId,
+          passed: qualityData.passed,
           timestamp: new Date().toISOString()
-        }, args[1] ? [JSON.parse(args[1])] : []);
+        });
         result.qrData = qualityQR;
         break;
+        
       case 'TransferCustody':
-        result.processId = `PROC_${Date.now()}`;
-        // Generate chained QR for processing
-        const processQR = await qrService.generateChainedQR({
+        const processId = `PROC_${Date.now()}`;
+        result.processId = processId;
+        
+        const processData = JSON.parse(args[0]);
+        const processing = {
+          processId: processId,
+          ...processData,
+          transactionId: transactionId
+        };
+        processings.push(processing);
+        
+        const processQR = await mockServices.generateQR({
           type: 'processing',
-          processId: result.processId,
+          processId: processId,
           timestamp: new Date().toISOString()
-        }, args[1] ? JSON.parse(args[1]) : []);
+        });
         result.qrData = processQR;
         break;
+        
       case 'BatchCreation':
-        result.batchId = `BATCH_${Date.now()}`;
-        // Generate final QR for consumer
-        const batchQR = await qrService.generateChainedQR({
+        const batchId = `BATCH_${Date.now()}`;
+        result.batchId = batchId;
+        
+        const batchData = JSON.parse(args[0]);
+        const batch = {
+          batchId: batchId,
+          ...batchData,
+          transactionId: transactionId
+        };
+        finalBatches.push(batch);
+        
+        const batchQR = await mockServices.generateQR({
           type: 'final-product',
-          batchId: result.batchId,
+          batchId: batchId,
           timestamp: new Date().toISOString()
-        }, args[1] ? JSON.parse(args[1]) : []);
+        });
         result.qrData = batchQR;
         break;
     }
@@ -564,12 +653,12 @@ app.post('/api/fabric/query', async (req, res) => {
     
     console.log(`Querying chaincode function: ${functionName}`, args);
     
-    // Mock query responses
     let result = { success: true, data: {} };
     
     switch (functionName) {
       case 'GetCollectionEvent':
-        result.data = {
+        const collection = collections.find(c => c.eventId === args[0]);
+        result.data = collection || {
           eventId: args[0],
           species: 'Ashwagandha',
           weight: 25.5,
@@ -577,16 +666,20 @@ app.post('/api/fabric/query', async (req, res) => {
           status: 'COLLECTED'
         };
         break;
+        
       case 'GetQualityTest':
-        result.data = {
+        const qualityTest = qualityTests.find(q => q.testId === args[0]);
+        result.data = qualityTest || {
           testId: args[0],
           species: 'Ashwagandha',
           testDate: new Date().toISOString(),
           passed: true
         };
         break;
+        
       case 'GetProcessingDetails':
-        result.data = {
+        const processing = processings.find(p => p.processId === args[0]);
+        result.data = processing || {
           processId: args[0],
           species: 'Ashwagandha',
           processType: 'Drying',
@@ -594,6 +687,7 @@ app.post('/api/fabric/query', async (req, res) => {
           processDate: new Date().toISOString()
         };
         break;
+        
       case 'GetProvenance':
         result.data = {
           batchId: args[0],
@@ -604,7 +698,7 @@ app.post('/api/fabric/query', async (req, res) => {
           journey: [
             {
               stage: 'Collection',
-              timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+              timestamp: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
               organization: 'FarmersCoop',
               latitude: 26.9124,
               longitude: 75.7873,
@@ -612,12 +706,12 @@ app.post('/api/fabric/query', async (req, res) => {
               details: {
                 species: 'Ashwagandha',
                 weight: '25.5 kg',
-                collector: 'John Farmer'
+                collector: 'Rajesh Kumar'
               }
             },
             {
               stage: 'Quality Testing',
-              timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+              timestamp: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
               organization: 'QualityLabs',
               latitude: 26.9200,
               longitude: 75.7900,
@@ -631,7 +725,7 @@ app.post('/api/fabric/query', async (req, res) => {
             },
             {
               stage: 'Processing',
-              timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+              timestamp: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
               organization: 'HerbProcessors',
               latitude: 26.9300,
               longitude: 75.7950,
@@ -645,7 +739,7 @@ app.post('/api/fabric/query', async (req, res) => {
             },
             {
               stage: 'Manufacturing',
-              timestamp: new Date().toISOString(),
+              timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
               organization: 'AyurMeds',
               latitude: 26.9400,
               longitude: 75.8000,
@@ -664,17 +758,11 @@ app.post('/api/fabric/query', async (req, res) => {
           },
           farmerStory: {
             story: 'This premium Ashwagandha was carefully cultivated in the fertile soils of Rajasthan using traditional organic farming methods passed down through generations.',
-            farmerName: 'John Farmer',
+            farmerName: 'Rajesh Kumar',
             farmName: 'Green Valley Organic Farm',
             location: 'Rajasthan, India'
           }
         };
-        break;
-      case 'GetApprovedZones':
-        result.data = database.getPermittedZones();
-        break;
-      case 'GetPermittedHerbs':
-        result.data = database.getPermittedHerbs();
         break;
     }
     
@@ -762,7 +850,6 @@ app.get('/api/manufacturer/processed-batches', (req, res) => {
 app.get('/api/dashboard/stats', (req, res) => {
   const { role } = req.query;
   
-  // Mock role-specific statistics
   const stats = {
     Collector: { totalBatches: 12, pendingActions: 3, completedTransactions: 45, smsCollections: 8 },
     LabTech: { totalBatches: 8, pendingActions: 2, completedTransactions: 32 },
@@ -789,39 +876,64 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve React app
-app.get('*', async (req, res, next) => {
-  // Skip API routes
+// Serve static files from dist directory
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+
+// Serve React app for all non-API routes
+app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
-    return next();
+    return res.status(404).json({ error: 'API endpoint not found' });
   }
   
-  try {
-    if (process.env.NODE_ENV === 'production') {
-      res.sendFile(path.join(__dirname, '../dist/index.html'));
-    } else {
-      // In development, let Vite handle the request
-      const url = req.originalUrl;
-      const template = await vite.transformIndexHtml(url, `
-        <!DOCTYPE html>
-        <html lang="en">
-          <head>
-            <meta charset="UTF-8" />
-            <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>HERBIONYX - Blockchain Herb Traceability</title>
-          </head>
-          <body>
-            <div id="root"></div>
-            <script type="module" src="/src/main.jsx"></script>
-          </body>
-        </html>
-      `);
-      res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-    }
-  } catch (e) {
-    vite && vite.ssrFixStacktrace(e);
-    next(e);
+  const indexPath = path.join(__dirname, '../dist/index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    // Fallback HTML for development
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>HERBIONYX - Loading...</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              display: flex; 
+              justify-content: center; 
+              align-items: center; 
+              height: 100vh; 
+              margin: 0; 
+              background: linear-gradient(135deg, #2d5016, #4a7c59);
+              color: white;
+            }
+            .loading { text-align: center; }
+            .spinner { 
+              border: 4px solid rgba(255,255,255,0.3); 
+              border-top: 4px solid white; 
+              border-radius: 50%; 
+              width: 40px; 
+              height: 40px; 
+              animation: spin 1s linear infinite; 
+              margin: 0 auto 20px;
+            }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          </style>
+        </head>
+        <body>
+          <div class="loading">
+            <div class="spinner"></div>
+            <h2>HERBIONYX</h2>
+            <p>Building application...</p>
+            <p>Please run: npm run build</p>
+          </div>
+        </body>
+      </html>
+    `);
   }
 });
 
@@ -833,8 +945,8 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🌿 HERBIONYX Server running on port ${PORT}`);
-  console.log(`🌐 Frontend and Backend integrated on http://localhost:${PORT}`);
-  console.log(`🔗 Hyperledger Fabric network: Connected`);
+  console.log(`🌐 Access application at http://localhost:${PORT}`);
+  console.log(`🔗 All services integrated and ready`);
   console.log(`📦 IPFS integration: Ready`);
   console.log(`📱 SMS support: Enabled`);
   console.log(`🔐 Authentication: Active`);
