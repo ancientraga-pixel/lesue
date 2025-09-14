@@ -5,6 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { createServer } from 'vite';
 
 // Import services
 import geolocationService from './services/geolocation.js';
@@ -19,6 +20,17 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Create Vite server in middleware mode
+let vite;
+if (process.env.NODE_ENV !== 'production') {
+  vite = await createServer({
+    server: { middlewareMode: true },
+    appType: 'spa'
+  });
+  app.use(vite.ssrFixStacktrace);
+  app.use(vite.middlewares);
+}
 
 // Middleware
 app.use(cors());
@@ -778,8 +790,39 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../build/index.html'));
+app.get('*', async (req, res, next) => {
+  // Skip API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      res.sendFile(path.join(__dirname, '../dist/index.html'));
+    } else {
+      // In development, let Vite handle the request
+      const url = req.originalUrl;
+      const template = await vite.transformIndexHtml(url, `
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>HERBIONYX - Blockchain Herb Traceability</title>
+          </head>
+          <body>
+            <div id="root"></div>
+            <script type="module" src="/src/main.jsx"></script>
+          </body>
+        </html>
+      `);
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+    }
+  } catch (e) {
+    vite && vite.ssrFixStacktrace(e);
+    next(e);
+  }
 });
 
 // Error handling middleware
@@ -790,6 +833,7 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🌿 HERBIONYX Server running on port ${PORT}`);
+  console.log(`🌐 Frontend and Backend integrated on http://localhost:${PORT}`);
   console.log(`🔗 Hyperledger Fabric network: Connected`);
   console.log(`📦 IPFS integration: Ready`);
   console.log(`📱 SMS support: Enabled`);
