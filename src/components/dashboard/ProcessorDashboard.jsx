@@ -123,7 +123,7 @@ function ProcessorDashboard() {
         setScannedData(null);
 
         fetchApprovedBatches();
-        alert('Processing recorded successfully on blockchain!');
+        alert(`Processing recorded on blockchain!\nTransaction ID: ${result.transactionId}\nBlock: ${result.blockNumber}`);
       }
     } catch (error) {
       console.error('Error recording processing:', error);
@@ -315,7 +315,7 @@ function ProcessorDashboard() {
         
         <div className="qr-display-area">
           {qrCode ? (
-            <QRGenerator data={qrCode.qrCodeUrl} size={256} />
+            <QRGenerator data={qrCode} size={256} showBlockchainButton={true} />
           ) : (
             <div className="qr-placeholder">
               <CheckCircle size={48} />

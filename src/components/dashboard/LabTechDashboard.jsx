@@ -127,7 +127,7 @@ function LabTechDashboard() {
         setScannedData(null);
 
         fetchPendingBatches();
-        alert('Quality attestation recorded successfully on blockchain!');
+        alert(`Quality test recorded on blockchain!\nTransaction ID: ${result.transactionId}\nBlock: ${result.blockNumber}`);
       }
     } catch (error) {
       console.error('Error recording attestation:', error);
@@ -343,7 +343,7 @@ function LabTechDashboard() {
         
         <div className="qr-display-area">
           {qrCode ? (
-            <QRGenerator data={qrCode.qrCodeUrl} size={256} />
+            <QRGenerator data={qrCode} size={256} showBlockchainButton={true} />
           ) : (
             <div className="qr-placeholder">
               <Camera size={48} />

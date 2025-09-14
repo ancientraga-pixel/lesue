@@ -16,109 +16,45 @@ function ConsumerPortal() {
       setLoading(true);
       setError('');
       
-      const qrData = JSON.parse(data);
-      console.log('QR Data received:', qrData);
+      // Parse QR data using backend service
+      const parseResponse = await fetch('/api/qr/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrData: data })
+      });
       
-      // Handle any QR type and get mock provenance data
-      if (qrData.type) {
-        // Get complete provenance data
-        const batchId = qrData.batchId || qrData.eventId || `BATCH_${Date.now()}`;
-        const result = await queryChaincode('GetProvenance', [batchId]);
+      if (!parseResponse.ok) {
+        throw new Error('Invalid QR code format');
+      }
+      
+      const parseResult = await parseResponse.json();
+      
+      if (!parseResult.valid) {
+        throw new Error(parseResult.error || 'Invalid QR code');
+      }
+      
+      const qrData = parseResult.data;
+      console.log('Valid QR Data received:', qrData);
+      
+      // Get real provenance data from blockchain
+      if (qrData.type && qrData.batchId) {
+        const result = await queryChaincode('GetProvenance', [qrData.batchId]);
         
         if (result.success) {
           setScannedData(qrData);
           setProvenanceData(result.data);
         } else {
-          // Show mock data even if query fails
-          setScannedData(qrData);
-          setProvenanceData(getMockProvenanceData(batchId));
+          throw new Error('Batch not found on blockchain');
         }
       } else {
-        setError('Invalid QR code format');
+        throw new Error('QR code missing required data');
       }
     } catch (error) {
       console.error('QR scan error:', error);
-      setError('Failed to process QR code');
+      setError(error.message || 'Failed to process QR code');
     } finally {
       setLoading(false);
     }
-  };
-
-  const getMockProvenanceData = (batchId) => {
-    return {
-      batchId: batchId,
-      productName: 'Premium Ashwagandha Powder',
-      species: 'Ashwagandha',
-      manufacturingDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      journey: [
-        {
-          stage: 'Collection',
-          timestamp: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          organization: 'FarmersCoop',
-          latitude: 26.9124,
-          longitude: 75.7873,
-          icon: '🌱',
-          details: {
-            species: 'Ashwagandha',
-            weight: '25.5 kg',
-            collector: 'Rajesh Kumar'
-          }
-        },
-        {
-          stage: 'Quality Testing',
-          timestamp: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-          organization: 'QualityLabs',
-          latitude: 26.9200,
-          longitude: 75.7900,
-          icon: '🔬',
-          details: {
-            moisture: '8.5%',
-            pesticides: '0.005 mg/kg',
-            heavyMetals: '2.1 ppm',
-            microbial: 'Negative'
-          }
-        },
-        {
-          stage: 'Processing',
-          timestamp: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-          organization: 'HerbProcessors',
-          latitude: 26.9300,
-          longitude: 75.7950,
-          icon: '⚙️',
-          details: {
-            processType: 'Drying',
-            temperature: '60°C',
-            duration: '24 hours',
-            yield: '20.2 kg'
-          }
-        },
-        {
-          stage: 'Manufacturing',
-          timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          organization: 'AyurMeds',
-          latitude: 26.9400,
-          longitude: 75.8000,
-          icon: '🏭',
-          details: {
-            productName: 'Premium Ashwagandha Powder',
-            batchSize: '100 units',
-            formulation: 'Pure Ashwagandha Root Powder'
-          }
-        }
-      ],
-      qualityTests: {
-        moisture: 8.5,
-        pesticides: 0.005,
-        heavyMetals: 2.1
-      },
-      farmerStory: {
-        story: 'This premium Ashwagandha was carefully cultivated in the fertile soils of Rajasthan using traditional organic farming methods passed down through generations.',
-        farmerName: 'Rajesh Kumar',
-        farmName: 'Green Valley Organic Farm',
-        location: 'Rajasthan, India'
-      }
-    };
   };
 
   const renderJourneyMap = () => {

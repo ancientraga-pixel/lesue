@@ -113,15 +113,11 @@ function CollectorDashboard() {
         });
 
         fetchBatches();
-        alert('Collection event recorded successfully on blockchain!');
+        alert(`Collection recorded on blockchain!\nTransaction ID: ${result.transactionId}\nBlock: ${result.blockNumber}`);
       }
     } catch (error) {
       console.error('Error recording collection:', error);
-      if (error.message.includes('Backend server is not running')) {
-        alert('Backend server is not running. Please start the server with "npm run server" in a separate terminal, then try again.');
-      } else {
-        alert(`Failed to record collection event: ${error.message}`);
-      }
+      alert(`Failed to record collection: ${error.message}`);
     }
 
     setLoading(false);
@@ -272,7 +268,7 @@ function CollectorDashboard() {
         
         <div className="qr-display-area">
           {qrCode ? (
-            <QRGenerator data={qrCode.qrCodeUrl} size={256} />
+            <QRGenerator data={qrCode} size={256} showBlockchainButton={true} />
           ) : (
             <div className="qr-placeholder">
               <Camera size={48} />

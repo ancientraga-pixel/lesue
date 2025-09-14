@@ -28,11 +28,22 @@ function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      // Mock API call to get dashboard statistics
+      // Real API call to get dashboard statistics
       const response = await fetch(`/api/dashboard/stats?role=${user.role}`);
       if (response.ok) {
         const data = await response.json();
         setStats(data);
+      }
+      
+      // Also fetch real blockchain health
+      const healthResponse = await fetch('/api/blockchain/health');
+      if (healthResponse.ok) {
+        const healthData = await healthResponse.json();
+        setStats(prev => ({
+          ...prev,
+          networkHealth: healthData.status === 'connected' ? 100 : 50,
+          fabricConnected: healthData.fabricConnected
+        }));
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -92,10 +103,10 @@ function Dashboard() {
           <div className="stat-card">
             <div className="stat-icon">🌐</div>
             <div className="stat-content">
-              <div className="stat-value">{networkStatus === 'connected' ? '100%' : '0%'}</div>
+              <div className="stat-value">{stats.networkHealth || 0}%</div>
               <div className="stat-label">Network Health</div>
               <div className={`network-status ${networkStatus}`}>
-                {networkStatus}
+                {stats.fabricConnected ? 'Fabric Connected' : 'Mock Mode'}
               </div>
             </div>
           </div>

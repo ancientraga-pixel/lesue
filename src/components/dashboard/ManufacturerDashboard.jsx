@@ -126,7 +126,7 @@ function ManufacturerDashboard() {
         setScannedData(null);
 
         fetchProcessedBatches();
-        alert('Final product created successfully on blockchain!');
+        alert(`Final product created on blockchain!\nTransaction ID: ${result.transactionId}\nBlock: ${result.blockNumber}`);
       }
     } catch (error) {
       console.error('Error creating final product:', error);
@@ -306,7 +306,7 @@ function ManufacturerDashboard() {
         <div className="qr-display-area">
           {finalQR ? (
             <div className="final-qr-container">
-              <QRGenerator data={finalQR.qrCodeUrl} size={256} />
+              <QRGenerator data={finalQR} size={256} showBlockchainButton={true} />
               <div className="qr-instructions">
                 <h4>Consumer QR Code Generated!</h4>
                 <p>This QR code contains the complete traceability information and should be printed on the product packaging for consumer verification.</p>

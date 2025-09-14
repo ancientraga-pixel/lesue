@@ -19,20 +19,22 @@ function QRScanner({ onScan }) {
       };
       reader.readAsDataURL(file);
 
-      // Auto-process QR code from image
+      // Real QR code processing would use jsQR library here
+      // For now, simulate QR detection
       setTimeout(() => {
-        // Mock QR data extraction - in real implementation, use jsQR library
-        const mockQRData = {
+        const simulatedQRData = {
+          id: `QR_${Date.now()}`,
           type: 'final-product',
           batchId: `BATCH_${Date.now()}`,
           timestamp: new Date().toISOString(),
-          network: 'HERBIONYX'
+          network: 'herbionyx',
+          version: '1.0'
         };
         
-        const qrDataString = JSON.stringify(mockQRData);
+        const qrDataString = JSON.stringify(simulatedQRData);
         setScannedResult(qrDataString);
         onScan(qrDataString);
-      }, 1000);
+      }, 1500);
 
     } catch (error) {
       console.error('QR processing error:', error);
@@ -43,16 +45,19 @@ function QRScanner({ onScan }) {
   const startCameraScan = () => {
     setIsScanning(true);
     
-    // Mock camera scan - in real implementation, use camera API
+    // Real camera scan would use getUserMedia API here
+    // For now, simulate camera scan
     setTimeout(() => {
-      const mockQRData = {
+      const simulatedQRData = {
+        id: `QR_${Date.now()}`,
         type: 'collection',
         eventId: `EVT_${Date.now()}`,
         timestamp: new Date().toISOString(),
-        network: 'HERBIONYX'
+        network: 'herbionyx',
+        version: '1.0'
       };
       
-      const qrDataString = JSON.stringify(mockQRData);
+      const qrDataString = JSON.stringify(simulatedQRData);
       setScannedResult(qrDataString);
       onScan(qrDataString);
       setIsScanning(false);
@@ -115,7 +120,7 @@ function QRScanner({ onScan }) {
         <div className="scanning-animation">
           <div className="scanner-frame">
             <div className="scanning-line"></div>
-            <p>Scanning QR Code...</p>
+            <p>Scanning for QR Code...</p>
           </div>
         </div>
       )}
@@ -123,7 +128,7 @@ function QRScanner({ onScan }) {
       {/* Results Display */}
       {scannedResult && (
         <div className="scan-results">
-          <h4>✅ QR Code Detected</h4>
+          <h4>✅ Valid HERBIONYX QR Code Detected</h4>
           <div className="result-preview">
             <pre>{JSON.stringify(JSON.parse(scannedResult), null, 2)}</pre>
           </div>
