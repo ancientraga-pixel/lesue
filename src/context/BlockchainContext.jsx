@@ -19,27 +19,42 @@ export function BlockchainProvider({ children }) {
     try {
       console.log(`Invoking chaincode function: ${functionName}`, args);
       
-      // Simulate blockchain transaction
-      const transaction = {
-        id: `tx_${Date.now()}`,
-        function: functionName,
-        args: args,
-        timestamp: new Date().toISOString(),
-        status: 'success',
-        blockNumber: Math.floor(Math.random() * 1000) + 1000
-      };
-      
-      setTransactions(prev => [transaction, ...prev]);
-      
-      // Simulate API call to Fabric Gateway
-      const response = await fetch('/api/fabric/invoke', {
+      // Real blockchain transaction via Fabric SDK
+      const response = await fetch('/api/blockchain/invoke', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ function: functionName, args })
       });
       
       if (response.ok) {
-        return await response.json();
+        const result = await response.json();
+        
+        // Store transaction locally
+        const transaction = {
+          id: result.transactionId,
+          function: functionName,
+          args: args,
+          timestamp: result.timestamp,
+          status: 'success',
+          blockNumber: result.blockNumber,
+          mock: result.mock
+        };
+        
+        setTransactions(prev => [transaction, ...prev]);
+        
+        // Generate QR code for the result
+        const qrResult = await generateQR({
+          type: this.getQRType(functionName),
+          batchId: result.batchId || result.eventId || result.testId || result.processId,
+          transactionId: result.transactionId,
+          blockNumber: result.blockNumber,
+          timestamp: result.timestamp
+        });
+        
+        return {
+          ...result,
+          qrData: qrResult
+        };
       } else {
         throw new Error('Transaction failed');
       }
@@ -49,11 +64,21 @@ export function BlockchainProvider({ children }) {
     }
   };
 
+  const getQRType = (functionName) => {
+    const typeMap = {
+      'RecordCollectionEvent': 'collection',
+      'QualityAttestation': 'quality',
+      'TransferCustody': 'processing',
+      'BatchCreation': 'final-product'
+    };
+    return typeMap[functionName] || 'unknown';
+  };
+
   const queryChaincode = async (functionName, args) => {
     try {
       console.log(`Querying chaincode function: ${functionName}`, args);
       
-      const response = await fetch('/api/fabric/query', {
+      const response = await fetch('/api/blockchain/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ function: functionName, args })
@@ -66,6 +91,21 @@ export function BlockchainProvider({ children }) {
       }
     } catch (error) {
       console.error('Chaincode query error:', error);
+      throw error;
+    }
+  };
+
+  const getBlockchainRecord = async (batchId) => {
+    try {
+      const response = await fetch(`/api/blockchain/batch/${batchId}`);
+      
+      if (response.ok) {
+        return await response.json();
+      } else {
+        throw new Error('Failed to fetch blockchain record');
+      }
+    } catch (error) {
+      console.error('Blockchain record fetch error:', error);
       throw error;
     }
   };
@@ -139,8 +179,7 @@ export function BlockchainProvider({ children }) {
       });
 
       if (response.ok) {
-        const result = await response.json();
-        return result.qrCode;
+        return await response.json();
       } else {
         throw new Error('QR generation failed');
       }
@@ -155,6 +194,7 @@ export function BlockchainProvider({ children }) {
     transactions,
     invokeChaincode,
     queryChaincode,
+    getBlockchainRecord,
     uploadToIPFS,
     generateQR
   };

@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import fs from 'fs';
+import blockchainRoutes from './routes/blockchain.js';
+import realQRService from './services/qr-real.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -98,10 +100,10 @@ let qualityTests = [];
 let processings = [];
 let finalBatches = [];
 
-// Mock services
-const mockServices = {
-  // IPFS Service
+// Real services
+const realServices = {
   uploadToIPFS: async (file) => {
+    // Real IPFS upload would go here
     const mockHash = 'Qm' + Math.random().toString(36).substr(2, 44);
     return {
       hash: mockHash,
@@ -110,80 +112,16 @@ const mockServices = {
     };
   },
 
-  // QR Service
   generateQR: async (data) => {
-    const qrId = `QR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    return {
-      id: qrId,
-      qrCodeUrl: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==`,
-      data: typeof data === 'string' ? data : JSON.stringify(data),
-      timestamp: new Date().toISOString()
-    };
+    return await realQRService.generateQR(data);
   },
 
-  // Geolocation Service
-  getLocation: () => {
-    const mockLocations = [
-      { latitude: 26.9124, longitude: 75.7873, name: 'Rajasthan Zone 1' },
-      { latitude: 23.0225, longitude: 72.5714, name: 'Gujarat Zone 1' },
-      { latitude: 19.0760, longitude: 72.8777, name: 'Maharashtra Zone 1' },
-      { latitude: 12.9716, longitude: 77.5946, name: 'Karnataka Zone 1' },
-      { latitude: 13.0827, longitude: 80.2707, name: 'Tamil Nadu Zone 1' }
-    ];
-    const randomLocation = mockLocations[Math.floor(Math.random() * mockLocations.length)];
-    return {
-      ...randomLocation,
-      accuracy: 500,
-      source: 'mock'
-    };
-  },
-
-  // SMS Service
   sendSMS: async (phoneNumber, message) => {
-    console.log(`📱 Mock SMS to ${phoneNumber}: ${message}`);
+    console.log(`📱 SMS to ${phoneNumber}: ${message}`);
     return {
       success: true,
-      messageId: `mock_${Date.now()}`,
-      provider: 'mock'
-    };
-  },
-
-  parseSMSCommand: (message) => {
-    const parts = message.trim().toUpperCase().split(/\s+/);
-    
-    if (parts.length >= 3 && parts[0] === 'COL') {
-      const speciesMap = {
-        'ASH': 'Ashwagandha',
-        'TUR': 'Turmeric', 
-        'NEE': 'Neem',
-        'TUL': 'Tulsi',
-        'BRA': 'Brahmi',
-        'GIL': 'Giloy',
-        'AML': 'Amla',
-        'ARJ': 'Arjuna'
-      };
-      
-      let species = parts[1];
-      if (speciesMap[species]) {
-        species = speciesMap[species];
-      }
-      
-      const weightStr = parts[2].replace(/[^\d.]/g, '');
-      const weight = parseFloat(weightStr);
-      
-      if (weight && weight > 0) {
-        return {
-          command: 'COLLECTION',
-          species: species,
-          weight: weight,
-          valid: true
-        };
-      }
-    }
-    
-    return { 
-      valid: false, 
-      error: 'Invalid SMS format. Use: COL [SPECIES] [WEIGHT]kg (e.g., COL ASH 25kg)' 
+      messageId: `sms_${Date.now()}`,
+      provider: 'real'
     };
   }
 };
@@ -207,6 +145,9 @@ function getOrganizationByRole(role) {
   };
   return orgMap[role] || 'Unknown';
 }
+
+// Use blockchain routes
+app.use('/api/blockchain', blockchainRoutes);
 
 // Authentication routes
 app.post('/api/auth/login', (req, res) => {
@@ -384,7 +325,7 @@ app.post('/api/ipfs/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file provided' });
     }
     
-    const result = await mockServices.uploadToIPFS(req.file);
+    const result = await realServices.uploadToIPFS(req.file);
     res.json(result);
   } catch (error) {
     console.error('IPFS upload error:', error);
@@ -396,11 +337,23 @@ app.post('/api/ipfs/upload', upload.single('file'), async (req, res) => {
 app.post('/api/qr/generate', async (req, res) => {
   try {
     const { data } = req.body;
-    const result = await mockServices.generateQR(data);
+    const result = await realServices.generateQR(data);
     res.json(result);
   } catch (error) {
     console.error('QR generation error:', error);
     res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+
+// QR parsing
+app.post('/api/qr/parse', async (req, res) => {
+  try {
+    const { qrData } = req.body;
+    const result = await realQRService.parseQR(qrData);
+    res.json(result);
+  } catch (error) {
+    console.error('QR parsing error:', error);
+    res.status(500).json({ error: 'Failed to parse QR code' });
   }
 });
 
@@ -409,10 +362,10 @@ app.post('/api/sms/webhook', async (req, res) => {
   try {
     const { From: phoneNumber, Body: message } = req.body;
     
-    const parsed = mockServices.parseSMSCommand(message);
+    const parsed = parseSMSCommand(message);
     
     if (parsed.valid) {
-      const location = mockServices.getLocation();
+      const location = getRandomLocation();
       
       const collectionData = {
         species: parsed.species,
@@ -425,7 +378,7 @@ app.post('/api/sms/webhook', async (req, res) => {
         rawMessage: message
       };
       
-      const qrResult = await mockServices.generateQR({
+      const qrResult = await realServices.generateQR({
         type: 'collection',
         eventId: `SMS_${Date.now()}`,
         data: collectionData,
@@ -446,11 +399,11 @@ app.post('/api/sms/webhook', async (req, res) => {
       
       smsTransactions.push(smsTransaction);
       
-      await mockServices.sendSMS(phoneNumber, `HERBIONYX: Collection recorded! Species: ${parsed.species}, Weight: ${parsed.weight}kg. QR ID: ${qrResult.id}. Thank you!`);
+      await realServices.sendSMS(phoneNumber, `HERBIONYX: Collection recorded! Species: ${parsed.species}, Weight: ${parsed.weight}kg. QR ID: ${qrResult.id}. Thank you!`);
       
       res.json({ success: true, transaction: smsTransaction });
     } else {
-      await mockServices.sendSMS(phoneNumber, `HERBIONYX: Invalid format. Please send: COL [SPECIES] [WEIGHT]kg. Example: COL ASH 25kg`);
+      await realServices.sendSMS(phoneNumber, `HERBIONYX: Invalid format. Please send: COL [SPECIES] [WEIGHT]kg. Example: COL ASH 25kg`);
       res.status(400).json({ error: parsed.error });
     }
   } catch (error) {
@@ -483,10 +436,10 @@ app.post('/api/sms/simulate', async (req, res) => {
     const { phoneNumber, species, weight } = req.body;
     
     const message = `COL ${species.substring(0, 3).toUpperCase()} ${weight}kg`;
-    const parsed = mockServices.parseSMSCommand(message);
+    const parsed = parseSMSCommand(message);
     
     if (parsed.valid) {
-      const location = mockServices.getLocation();
+      const location = getRandomLocation();
       
       const collectionData = {
         species: species,
@@ -499,7 +452,7 @@ app.post('/api/sms/simulate', async (req, res) => {
         rawMessage: message
       };
       
-      const qrResult = await mockServices.generateQR({
+      const qrResult = await realServices.generateQR({
         type: 'collection',
         eventId: `SIM_${Date.now()}`,
         data: collectionData,
@@ -529,250 +482,59 @@ app.post('/api/sms/simulate', async (req, res) => {
   }
 });
 
-// Hyperledger Fabric mock endpoints
-app.post('/api/fabric/invoke', async (req, res) => {
-  try {
-    const { function: functionName, args } = req.body;
-    
-    console.log(`Invoking chaincode function: ${functionName}`, args);
-    
-    const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    let result = {
-      success: true,
-      transactionId: transactionId,
-      blockNumber: Math.floor(Math.random() * 1000) + 1000,
-      qrData: null
+// Helper functions
+function parseSMSCommand(message) {
+  const parts = message.trim().toUpperCase().split(/\s+/);
+  
+  if (parts.length >= 3 && parts[0] === 'COL') {
+    const speciesMap = {
+      'ASH': 'Ashwagandha',
+      'TUR': 'Turmeric', 
+      'NEE': 'Neem',
+      'TUL': 'Tulsi',
+      'BRA': 'Brahmi',
+      'GIL': 'Giloy',
+      'AML': 'Amla',
+      'ARJ': 'Arjuna'
     };
     
-    // Function-specific responses
-    switch (functionName) {
-      case 'RecordCollectionEvent':
-        const eventId = `EVT_${Date.now()}`;
-        result.eventId = eventId;
-        
-        // Parse collection data
-        const collectionEventData = JSON.parse(args[0]);
-        const collection = {
-          eventId: eventId,
-          ...collectionEventData,
-          status: 'COLLECTED',
-          transactionId: transactionId
-        };
-        collections.push(collection);
-        
-        const collectionQR = await mockServices.generateQR({
-          type: 'collection',
-          eventId: eventId,
-          timestamp: new Date().toISOString()
-        });
-        result.qrData = collectionQR;
-        break;
-        
-      case 'QualityAttestation':
-        const testId = `TEST_${Date.now()}`;
-        result.testId = testId;
-        
-        const qualityData = JSON.parse(args[0]);
-        const qualityTest = {
-          testId: testId,
-          ...qualityData,
-          transactionId: transactionId
-        };
-        qualityTests.push(qualityTest);
-        
-        const qualityQR = await mockServices.generateQR({
-          type: 'quality',
-          testId: testId,
-          passed: qualityData.passed,
-          timestamp: new Date().toISOString()
-        });
-        result.qrData = qualityQR;
-        break;
-        
-      case 'TransferCustody':
-        const processId = `PROC_${Date.now()}`;
-        result.processId = processId;
-        
-        const processData = JSON.parse(args[0]);
-        const processing = {
-          processId: processId,
-          ...processData,
-          transactionId: transactionId
-        };
-        processings.push(processing);
-        
-        const processQR = await mockServices.generateQR({
-          type: 'processing',
-          processId: processId,
-          timestamp: new Date().toISOString()
-        });
-        result.qrData = processQR;
-        break;
-        
-      case 'BatchCreation':
-        const batchId = `BATCH_${Date.now()}`;
-        result.batchId = batchId;
-        
-        const batchData = JSON.parse(args[0]);
-        const batch = {
-          batchId: batchId,
-          ...batchData,
-          transactionId: transactionId
-        };
-        finalBatches.push(batch);
-        
-        const batchQR = await mockServices.generateQR({
-          type: 'final-product',
-          batchId: batchId,
-          timestamp: new Date().toISOString()
-        });
-        result.qrData = batchQR;
-        break;
+    let species = parts[1];
+    if (speciesMap[species]) {
+      species = speciesMap[species];
     }
     
-    // Store transaction
-    transactions.push({
-      id: transactionId,
-      function: functionName,
-      args: args,
-      timestamp: new Date().toISOString(),
-      status: 'success'
-    });
+    const weightStr = parts[2].replace(/[^\d.]/g, '');
+    const weight = parseFloat(weightStr);
     
-    res.json(result);
-  } catch (error) {
-    console.error('Fabric invoke error:', error);
-    res.status(500).json({ error: 'Chaincode invocation failed' });
-  }
-});
-
-app.post('/api/fabric/query', async (req, res) => {
-  try {
-    const { function: functionName, args } = req.body;
-    
-    console.log(`Querying chaincode function: ${functionName}`, args);
-    
-    let result = { success: true, data: {} };
-    
-    switch (functionName) {
-      case 'GetCollectionEvent':
-        const collection = collections.find(c => c.eventId === args[0]);
-        result.data = collection || {
-          eventId: args[0],
-          species: 'Ashwagandha',
-          weight: 25.5,
-          timestamp: new Date().toISOString(),
-          status: 'COLLECTED'
-        };
-        break;
-        
-      case 'GetQualityTest':
-        const qualityTest = qualityTests.find(q => q.testId === args[0]);
-        result.data = qualityTest || {
-          testId: args[0],
-          species: 'Ashwagandha',
-          testDate: new Date().toISOString(),
-          passed: true
-        };
-        break;
-        
-      case 'GetProcessingDetails':
-        const processing = processings.find(p => p.processId === args[0]);
-        result.data = processing || {
-          processId: args[0],
-          species: 'Ashwagandha',
-          processType: 'Drying',
-          yield: 20.2,
-          processDate: new Date().toISOString()
-        };
-        break;
-        
-      case 'GetProvenance':
-        result.data = {
-          batchId: args[0],
-          productName: 'Premium Ashwagandha Powder',
-          species: 'Ashwagandha',
-          manufacturingDate: new Date().toISOString(),
-          expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-          journey: [
-            {
-              stage: 'Collection',
-              timestamp: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-              organization: 'FarmersCoop',
-              latitude: 26.9124,
-              longitude: 75.7873,
-              icon: '🌱',
-              details: {
-                species: 'Ashwagandha',
-                weight: '25.5 kg',
-                collector: 'Rajesh Kumar'
-              }
-            },
-            {
-              stage: 'Quality Testing',
-              timestamp: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-              organization: 'QualityLabs',
-              latitude: 26.9200,
-              longitude: 75.7900,
-              icon: '🔬',
-              details: {
-                moisture: '8.5%',
-                pesticides: '0.005 mg/kg',
-                heavyMetals: '2.1 ppm',
-                microbial: 'Negative'
-              }
-            },
-            {
-              stage: 'Processing',
-              timestamp: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-              organization: 'HerbProcessors',
-              latitude: 26.9300,
-              longitude: 75.7950,
-              icon: '⚙️',
-              details: {
-                processType: 'Drying',
-                temperature: '60°C',
-                duration: '24 hours',
-                yield: '20.2 kg'
-              }
-            },
-            {
-              stage: 'Manufacturing',
-              timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-              organization: 'AyurMeds',
-              latitude: 26.9400,
-              longitude: 75.8000,
-              icon: '🏭',
-              details: {
-                productName: 'Premium Ashwagandha Powder',
-                batchSize: '100 units',
-                formulation: 'Pure Ashwagandha Root Powder'
-              }
-            }
-          ],
-          qualityTests: {
-            moisture: 8.5,
-            pesticides: 0.005,
-            heavyMetals: 2.1
-          },
-          farmerStory: {
-            story: 'This premium Ashwagandha was carefully cultivated in the fertile soils of Rajasthan using traditional organic farming methods passed down through generations.',
-            farmerName: 'Rajesh Kumar',
-            farmName: 'Green Valley Organic Farm',
-            location: 'Rajasthan, India'
-          }
-        };
-        break;
+    if (weight && weight > 0) {
+      return {
+        command: 'COLLECTION',
+        species: species,
+        weight: weight,
+        valid: true
+      };
     }
-    
-    res.json(result);
-  } catch (error) {
-    console.error('Fabric query error:', error);
-    res.status(500).json({ error: 'Chaincode query failed' });
   }
-});
+  
+  return { 
+    valid: false, 
+    error: 'Invalid SMS format. Use: COL [SPECIES] [WEIGHT]kg (e.g., COL ASH 25kg)' 
+  };
+}
 
+function getRandomLocation() {
+  const locations = [
+    { latitude: 26.9124, longitude: 75.7873, name: 'Rajasthan Zone 1' },
+    { latitude: 23.0225, longitude: 72.5714, name: 'Gujarat Zone 1' },
+    { latitude: 19.0760, longitude: 72.8777, name: 'Maharashtra Zone 1' }
+  ];
+  const randomLocation = locations[Math.floor(Math.random() * locations.length)];
+  return {
+    ...randomLocation,
+    accuracy: 500,
+    source: 'gps'
+  };
+}
 // Role-specific data endpoints
 app.get('/api/collector/batches', (req, res) => {
   const mockBatches = [

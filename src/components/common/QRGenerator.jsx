@@ -1,71 +1,63 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, Printer, Copy, Eye } from 'lucide-react';
+import { Download, Printer, Copy, Eye, Database } from 'lucide-react';
+import BlockchainRecordModal from './BlockchainRecordModal';
 
-function QRGenerator({ data, size = 256 }) {
+function QRGenerator({ data, size = 256, showBlockchainButton = true }) {
   const canvasRef = useRef(null);
-  const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [qrImage, setQrImage] = useState(null);
   const [showPreview, setShowPreview] = useState(true);
+  const [showBlockchainModal, setShowBlockchainModal] = useState(false);
+  const [batchId, setBatchId] = useState(null);
 
   useEffect(() => {
-    if (data && canvasRef.current) {
-      generateQRCode();
+    if (data) {
+      processQRData();
     }
-  }, [data, size]);
+  }, [data]);
 
-  const generateQRCode = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    // Set canvas size
-    canvas.width = size;
-    canvas.height = size;
-    
-    // Create a simple QR-like pattern (mock implementation)
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, size, size);
-    
-    ctx.fillStyle = '#000000';
-    const moduleSize = size / 25;
-    
-    // Create QR pattern
-    for (let i = 0; i < 25; i++) {
-      for (let j = 0; j < 25; j++) {
-        if (Math.random() > 0.5) {
-          ctx.fillRect(i * moduleSize, j * moduleSize, moduleSize, moduleSize);
+  const processQRData = () => {
+    try {
+      // If data is already a data URL (from real QR generation)
+      if (typeof data === 'string' && data.startsWith('data:image')) {
+        setQrImage(data);
+        return;
+      }
+      
+      // If data is an object with qrCodeUrl
+      if (typeof data === 'object' && data.qrCodeUrl) {
+        setQrImage(data.qrCodeUrl);
+        setBatchId(data.batchId);
+        return;
+      }
+      
+      // If data is a string, try to parse it
+      if (typeof data === 'string') {
+        try {
+          const parsed = JSON.parse(data);
+          setBatchId(parsed.batchId || parsed.id);
+        } catch (e) {
+          // Not JSON, use as is
         }
       }
+      
+      // Fallback: use data as is
+      setQrImage(data);
+    } catch (error) {
+      console.error('QR data processing error:', error);
     }
-    
-    // Add corner markers
-    const markerSize = moduleSize * 7;
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, markerSize, markerSize);
-    ctx.fillRect(size - markerSize, 0, markerSize, markerSize);
-    ctx.fillRect(0, size - markerSize, markerSize, markerSize);
-    
-    ctx.fillStyle = '#FFFFFF';
-    const innerSize = moduleSize * 5;
-    const offset = moduleSize;
-    ctx.fillRect(offset, offset, innerSize, innerSize);
-    ctx.fillRect(size - markerSize + offset, offset, innerSize, innerSize);
-    ctx.fillRect(offset, size - markerSize + offset, innerSize, innerSize);
-    
-    // Convert to data URL
-    const dataUrl = canvas.toDataURL('image/png');
-    setQrDataUrl(dataUrl);
   };
 
   const downloadQR = () => {
-    if (qrDataUrl) {
+    if (qrImage) {
       const link = document.createElement('a');
       link.download = `herbionyx-qr-${Date.now()}.png`;
-      link.href = qrDataUrl;
+      link.href = qrImage;
       link.click();
     }
   };
 
   const printQR = () => {
-    if (qrDataUrl) {
+    if (qrImage) {
       const printWindow = window.open('', '_blank');
       printWindow.document.write(`
         <html>
@@ -109,7 +101,7 @@ function QRGenerator({ data, size = 256 }) {
             <div class="qr-container">
               <div class="qr-title">HERBIONYX</div>
               <div class="qr-subtitle">Ayurvedic Herbs Traceability</div>
-              <img src="${qrDataUrl}" class="qr-image" />
+              <img src="${qrImage}" class="qr-image" />
               <div class="qr-footer">Generated: ${new Date().toLocaleString()}</div>
             </div>
           </body>
@@ -152,22 +144,38 @@ function QRGenerator({ data, size = 256 }) {
           <Eye size={16} />
           {showPreview ? 'Hide' : 'Show'} Preview
         </button>
+        {showBlockchainButton && batchId && (
+          <button 
+            onClick={() => setShowBlockchainModal(true)}
+            className="blockchain-button"
+          >
+            <Database size={16} />
+            View Blockchain Record
+          </button>
+        )}
       </div>
 
       {showPreview && (
         <div className="qr-display">
           <div className="qr-container">
-            <canvas 
-              ref={canvasRef} 
-              className="qr-canvas"
-              style={{ width: size, height: size }}
-            />
+            {qrImage ? (
+              <img 
+                src={qrImage} 
+                alt="QR Code"
+                className="qr-image"
+                style={{ width: size, height: size }}
+              />
+            ) : (
+              <div className="qr-placeholder" style={{ width: size, height: size }}>
+                <span>Generating QR...</span>
+              </div>
+            )}
           </div>
           
           <div className="qr-info">
             <div className="data-preview">
               <h4>QR Data Preview:</h4>
-              <pre>{typeof data === 'string' ? data : JSON.stringify(data, null, 2)}</pre>
+              <pre>{typeof data === 'object' && data.data ? data.data : (typeof data === 'string' ? data : JSON.stringify(data, null, 2))}</pre>
             </div>
           </div>
         </div>
@@ -187,6 +195,13 @@ function QRGenerator({ data, size = 256 }) {
           Copy Data
         </button>
       </div>
+
+      {/* Blockchain Record Modal */}
+      <BlockchainRecordModal 
+        isOpen={showBlockchainModal}
+        onClose={() => setShowBlockchainModal(false)}
+        batchId={batchId}
+      />
 
       <div className="qr-instructions">
         <p>✅ QR code generated successfully!</p>
@@ -235,6 +250,25 @@ function QRGenerator({ data, size = 256 }) {
           background: #e5e7eb;
         }
 
+        .blockchain-button {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 12px;
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+        }
+
+        .blockchain-button:hover {
+          background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+          transform: translateY(-1px);
+        }
+
         .qr-display {
           display: flex;
           flex-direction: column;
@@ -251,9 +285,20 @@ function QRGenerator({ data, size = 256 }) {
           border: 1px solid #e5e7eb;
         }
 
-        .qr-canvas {
+        .qr-image {
           display: block;
           border-radius: 8px;
+        }
+        
+        .qr-placeholder {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #f3f4f6;
+          border: 2px dashed #d1d5db;
+          border-radius: 8px;
+          color: #6b7280;
+          font-weight: 500;
         }
 
         .qr-info {
