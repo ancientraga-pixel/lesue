@@ -72,6 +72,8 @@ export function BlockchainProvider({ children }) {
 
   const uploadToIPFS = async (file, metadata) => {
     try {
+      console.log('Starting IPFS upload...', { fileName: file.name, fileSize: file.size });
+      
       const formData = new FormData();
       formData.append('file', file);
       if (metadata) {
@@ -83,17 +85,25 @@ export function BlockchainProvider({ children }) {
         body: formData
       });
 
+      console.log('IPFS upload response status:', response.status);
+      
       if (response.ok) {
         const result = await response.json();
+        console.log('IPFS upload successful:', result);
         return {
           hash: result.hash,
           url: `https://ipfs.io/ipfs/${result.hash}`
         };
       } else {
-        throw new Error('IPFS upload failed');
+        const errorText = await response.text();
+        console.error('IPFS upload failed:', response.status, errorText);
+        throw new Error(`IPFS upload failed: ${response.status} - ${errorText}`);
       }
     } catch (error) {
       console.error('IPFS upload error:', error);
+      if (error.message.includes('Failed to fetch') || error.message.includes('ECONNREFUSED')) {
+        throw new Error('Backend server is not running. Please start the server with "npm run server" in a separate terminal.');
+      }
       throw error;
     }
   };

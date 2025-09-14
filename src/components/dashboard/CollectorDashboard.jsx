@@ -117,7 +117,11 @@ function CollectorDashboard() {
       }
     } catch (error) {
       console.error('Error recording collection:', error);
-      alert('Failed to record collection event');
+      if (error.message.includes('Backend server is not running')) {
+        alert('Backend server is not running. Please start the server with "npm run server" in a separate terminal, then try again.');
+      } else {
+        alert(`Failed to record collection event: ${error.message}`);
+      }
     }
 
     setLoading(false);
